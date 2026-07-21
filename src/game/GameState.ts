@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BASE_STATS, getMaxStamina, type Area, type PlayerStats } from "./utils/constants";
+import { AREA_CONFIGS, BASE_STATS, getMaxStamina, type Area, type PlayerStats } from "./utils/constants";
 import { ROLE_CONFIG, roleForType, type EnemyRole } from "./utils/enemyRoles";
 import { getEffectiveMaxHP, type ItemUpgrades } from "./utils/equipment";
 import type { ItemSlot } from "./utils/items";
@@ -28,6 +28,7 @@ export interface PlayerState {
   dead: boolean;
   flaskCharges: number;
   maxFlaskCharges: number;
+  lastHealAtMs: number; // performance.now() timestamp, read by the Tidewarden's heal-punish grab trigger
 }
 
 export type EnemyAIState = "idle" | "chase" | "windup" | "strike" | "recover" | "retreat" | "cower" | "dead";
@@ -83,6 +84,50 @@ export interface EnemyState {
   toadHopTargetZ: number;
 }
 
+// Bosses reuse the same idle->aggro->windup->strike->recover shape as
+// EnemyState (see Boss.tsx), but their move data (BossMove, from
+// bossData.ts) and per-move flags (unblockable/lunge/ranged/leavesHazard)
+// don't fit RoleConfig's shape, so they get their own state type rather
+// than being shoehorned into EnemyState/EnemyRole.
+export type BossPhase = "ground" | "flight"; // only the Dragon ever leaves "ground"
+
+export interface BossState {
+  bossType: string;
+  name: string;
+  position: THREE.Vector3;
+  hp: number;
+  maxHp: number;
+  baseDamage: number;
+  aiState: EnemyAIState;
+  stateElapsedMs: number;
+  hitFlashMs: number;
+  moveIndex: number; // index into bossMovesForType(bossType), picked at windup entry
+  hasDealtDamageThisStrike: boolean;
+  hasFiredThisStrike: boolean;
+  windupTargetX: number;
+  windupTargetZ: number;
+  lungeFromX: number;
+  lungeFromZ: number;
+  // Set at strike-entry each time, read by GameScene/Boss's own damage
+  // application (mirrors Enemy.ts's lastStrikeUnblockable/lastStrikeLeavesHazard
+  // plumbing described in bossData.ts).
+  lastStrikeUnblockable: boolean;
+  lastStrikeLeavesHazard: boolean;
+  // The Hollow Wyrm only — every other boss stays in "ground" forever and
+  // ignores these two fields.
+  phase: BossPhase;
+  phaseElapsedMs: number;
+}
+
+export interface GroundHazard {
+  id: number;
+  position: THREE.Vector3;
+  radius: number;
+  damagePerSec: number;
+  remainingMs: number;
+  color: string;
+}
+
 export interface ProjectileState {
   id: number;
   position: THREE.Vector3;
@@ -109,6 +154,14 @@ export interface GameState {
   paused: boolean; // set true while a full-screen UI panel (inventory, etc) is open
   player: PlayerState;
   enemies: EnemyState[];
+  boss?: BossState;
+  hazards: GroundHazard[];
+  nextHazardId: number;
+  // True while mapData.bossGateDoor should block player movement (see
+  // collision.ts's isGateBlocked) — locked as long as the area's boss is
+  // alive, forcing the fight instead of letting the player route around it
+  // to the end room. Irrelevant (stays false) for areas with no boss.
+  gateLocked: boolean;
   projectiles: ProjectileState[];
   nextProjectileId: number;
   floatingText: FloatingText[];
@@ -145,6 +198,32 @@ export function createPlayerState(spawn: { x: number; y: number }): PlayerState 
     dead: false,
     flaskCharges: FLASK_START_CHARGES,
     maxFlaskCharges: FLASK_START_CHARGES,
+    lastHealAtMs: -Infinity,
+  };
+}
+
+export function createBossState(bossType: string, name: string, maxHp: number, baseDamage: number, position: THREE.Vector3): BossState {
+  return {
+    bossType,
+    name,
+    position: position.clone(),
+    hp: maxHp,
+    maxHp,
+    baseDamage,
+    aiState: "idle",
+    stateElapsedMs: 0,
+    hitFlashMs: 0,
+    moveIndex: 0,
+    hasDealtDamageThisStrike: false,
+    hasFiredThisStrike: false,
+    windupTargetX: 0,
+    windupTargetZ: 0,
+    lungeFromX: 0,
+    lungeFromZ: 0,
+    lastStrikeUnblockable: false,
+    lastStrikeLeavesHazard: false,
+    phase: "ground",
+    phaseElapsedMs: 0,
   };
 }
 
@@ -201,17 +280,48 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     const role = roleForType(spawn.type);
     return createEnemyState(`${spawn.type}-${i}`, role, new THREE.Vector3(spawn.x + 0.5, 0, spawn.y + 0.5), areaDamageMultiplier);
   });
+
+  const areaConfig = AREA_CONFIGS[area];
+  const boss =
+    mapData.bossSpawn && areaConfig.bossType
+      ? createBossState(
+          mapData.bossSpawn.type,
+          areaConfig.bossName,
+          areaConfig.bossHP,
+          areaConfig.bossDamage,
+          new THREE.Vector3(mapData.bossSpawn.x + 0.5, 0, mapData.bossSpawn.y + 0.5)
+        )
+      : undefined;
+
   return {
     mapData,
     area,
     paused: false,
     player: createPlayerState(mapData.playerSpawn),
     enemies,
+    boss,
+    hazards: [],
+    nextHazardId: 0,
+    gateLocked: !!(boss && mapData.bossGateDoor),
     projectiles: [],
     nextProjectileId: 0,
     floatingText: [],
     nextTextId: 0,
   };
+}
+
+// Matches Hohenberg's pool precedent (see spawnProjectile below) — no hard
+// cap here since hazards are few and short-lived (a handful of boss slams
+// at once, tens of seconds each), unlike the pooled-and-capped projectiles.
+export function spawnGroundHazard(state: GameState, position: THREE.Vector3, radius: number, damagePerSec: number, durationMs: number, color: string) {
+  state.hazards.push({
+    id: state.nextHazardId++,
+    position: position.clone(),
+    radius,
+    damagePerSec,
+    remainingMs: durationMs,
+    color,
+  });
 }
 
 // Matches Hohenberg's pool precedent — spawning past the cap silently drops

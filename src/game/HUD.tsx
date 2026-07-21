@@ -10,6 +10,9 @@ export function HUD({ state }: { state: GameState }) {
   const enemiesRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const deathRef = useRef<HTMLDivElement>(null);
+  const bossPanelRef = useRef<HTMLDivElement>(null);
+  const bossNameRef = useRef<HTMLDivElement>(null);
+  const bossBarRef = useRef<HTMLDivElement>(null);
   const shownTextIds = useRef<Set<number>>(new Set());
 
   useEffect(() => {
@@ -44,6 +47,15 @@ export function HUD({ state }: { state: GameState }) {
 
       if (deathRef.current) deathRef.current.style.display = p.dead ? "flex" : "none";
 
+      const boss = state.boss;
+      if (bossPanelRef.current) {
+        bossPanelRef.current.style.display = boss && boss.aiState !== "dead" && boss.aiState !== "idle" ? "block" : "none";
+        if (boss) {
+          if (bossNameRef.current) bossNameRef.current.textContent = boss.name;
+          if (bossBarRef.current) bossBarRef.current.style.width = `${Math.max(0, (boss.hp / boss.maxHp) * 100)}%`;
+        }
+      }
+
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -64,6 +76,16 @@ export function HUD({ state }: { state: GameState }) {
       </div>
 
       <div ref={enemiesRef} style={{ position: "absolute", top: 20, right: 20, fontSize: 13, opacity: 0.85 }} />
+
+      <div
+        ref={bossPanelRef}
+        style={{ display: "none", position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)", width: 340, textAlign: "center" }}
+      >
+        <div ref={bossNameRef} style={{ fontSize: 14, letterSpacing: 2, marginBottom: 4, textShadow: "1px 1px 2px black" }} />
+        <div style={{ height: 12, background: "#1a0a0a", border: "1px solid #661a1a" }}>
+          <div ref={bossBarRef} style={{ height: "100%", background: "#a8283c", width: "100%", transition: "width 0.15s ease-out" }} />
+        </div>
+      </div>
 
       <div ref={logRef} style={{ position: "absolute", top: 20, left: 20, fontSize: 16, fontWeight: "bold", textShadow: "1px 1px 2px black" }} />
 

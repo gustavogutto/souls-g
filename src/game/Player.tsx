@@ -17,7 +17,7 @@ import {
   FLASK_HEAL_FRACTION,
   type MeleeAction,
 } from "./gameConstants";
-import { resolveCollision } from "./maps/collision";
+import { isGateBlocked, resolveCollision } from "./maps/collision";
 import type { GameInput } from "./input";
 
 const ATTACK_ARC_COS = Math.cos((70 * Math.PI) / 180); // +/-70 deg frontal cone
@@ -107,6 +107,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
       p.flaskCharges -= 1;
       const healFrac = getEffectiveHealFraction(FLASK_HEAL_FRACTION, p.equipped, p.upgrades);
       p.hp = Math.min(p.maxHp, p.hp + p.maxHp * healFrac);
+      p.lastHealAtMs = performance.now();
       spawnFloatingText(state, "+HP", p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#66ff66");
     }
     actions.heal = false;
@@ -146,11 +147,54 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
           }
         }
       }
+
+      const boss = state.boss;
+      if (boss && boss.hp > 0 && boss.aiState !== "dead" && boss.phase !== "flight") {
+        const toBoss = new THREE.Vector3().subVectors(boss.position, p.position);
+        const dist = toBoss.length();
+        if (dist <= config.range + 0.6) {
+          toBoss.normalize();
+          if (forward.dot(toBoss) >= ATTACK_ARC_COS) {
+            const dmg = Math.round(computeWeaponDamage(p.stats, p.equipped, p.upgrades) * config.damageMultiplier);
+            boss.hp = Math.max(0, boss.hp - dmg);
+            boss.hitFlashMs = 150;
+            spawnFloatingText(state, `${dmg}`, boss.position.clone().add(new THREE.Vector3(0, 2.4, 0)), "#ffcc55");
+            if (boss.hp <= 0) {
+              boss.aiState = "dead";
+              state.gateLocked = false;
+              spawnFloatingText(state, "SLAIN", boss.position.clone().add(new THREE.Vector3(0, 3, 0)), "#ff5555");
+            }
+          }
+        }
+      }
+
       p.attackHitApplied = true;
     }
 
-    // Tile-grid collision (walls resolved against the 2D grid, not the 3D mesh)
-    resolveCollision(state.mapData, p.position, PLAYER_RADIUS);
+    // Ground hazards (boss slam/breath patches) — flat per-second tick applied
+    // while standing in the radius, same "no i-frame interaction" precedent
+    // as Hohenberg's own DoT patches (rolling doesn't save you from these).
+    // Owns expiry too (Hazards.tsx is visual-only, driven off this same array).
+    for (let i = state.hazards.length - 1; i >= 0; i--) {
+      const hazard = state.hazards[i];
+      hazard.remainingMs -= dtMs;
+      if (hazard.remainingMs <= 0) {
+        state.hazards.splice(i, 1);
+        continue;
+      }
+      if (!p.dead && p.position.distanceTo(hazard.position) <= hazard.radius) {
+        const dmg = applyDamageReduction(Math.round(hazard.damagePerSec * dt), p.equipped, p.upgrades);
+        if (dmg > 0) {
+          p.hp = Math.max(0, p.hp - dmg);
+          p.hitFlashMs = 200;
+          if (p.hp <= 0) p.dead = true;
+        }
+      }
+    }
+
+    // Tile-grid collision (walls resolved against the 2D grid, not the 3D mesh) —
+    // the boss gate door additionally blocks passage while the area's boss is alive.
+    resolveCollision(state.mapData, p.position, PLAYER_RADIUS, (tx, ty) => isGateBlocked(state.mapData, state.gateLocked, tx, ty));
 
     // Push to the render objects
     groupRef.current.position.set(p.position.x, 0, p.position.z);
