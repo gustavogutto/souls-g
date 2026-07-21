@@ -23,6 +23,7 @@ export interface ActionPulses {
   shieldBash: boolean;
   roll: boolean;
   heal: boolean;
+  interact: boolean; // chests + secret-fight levers — no Hohenberg precedent (this port's own addition)
 }
 
 export interface JoystickState {
@@ -51,11 +52,12 @@ const KEY_ACTION_MAP: Record<string, keyof ActionPulses> = {
   KeyL: "shieldBash",
   Space: "roll",
   KeyF: "heal",
+  KeyE: "interact",
 };
 
 export function useGameInput() {
   const axes = useRef<KeyboardAxes>({ forward: false, back: false, left: false, right: false, sprint: false });
-  const actions = useRef<ActionPulses>({ attackLight: false, attackHeavy: false, shieldBash: false, roll: false, heal: false });
+  const actions = useRef<ActionPulses>({ attackLight: false, attackHeavy: false, shieldBash: false, roll: false, heal: false, interact: false });
   const joystick = useRef<JoystickState>({ x: 0, z: 0, sprinting: false });
 
   useEffect(() => {

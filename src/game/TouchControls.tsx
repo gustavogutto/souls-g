@@ -207,6 +207,13 @@ export function TouchControls({ input, state, onToggleInventory }: { input: Game
       />
 
       <ActionButton label="INV" color="#c9a84c" style={{ right: 20, top: 56, width: 44, height: 44 }} onTap={onToggleInventory} />
+
+      <ActionButton
+        label="USE"
+        color="#c9a84c"
+        style={{ left: 210, bottom: 260, width: 52, height: 52 }}
+        onTap={() => (input.actions.current.interact = true)}
+      />
     </div>
   );
 }

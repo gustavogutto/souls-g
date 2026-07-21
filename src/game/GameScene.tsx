@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import type { Mesh } from "three";
 import { createGameState, type GameState } from "./GameState";
 import { useGameInput } from "./input";
 import { generateMap } from "./maps/MapGenerator";
@@ -8,6 +9,9 @@ import { Floor, Area, AREA_CONFIGS } from "./utils/constants";
 import { DungeonRenderer } from "./DungeonRenderer";
 import { Player } from "./Player";
 import { Enemy } from "./Enemy";
+import { Boss } from "./Boss";
+import { Hazards } from "./Hazards";
+import { Interactables } from "./Interactables";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
@@ -17,6 +21,26 @@ import { InventoryPanel } from "./InventoryPanel";
 import { loadGame, saveGame, applySaveData, type SaveData } from "./saveGame";
 
 const AUTOSAVE_INTERVAL_MS = 5000;
+
+// The corridor tile connecting the boss room to the end room — solid for as
+// long as GameState.gateLocked is true (see collision.ts's isGateBlocked),
+// so the player can't just walk around the boss to reach the exit.
+function BossGateDoor({ state }: { state: GameState }) {
+  const ref = useRef<Mesh>(null!);
+  const door = state.mapData.bossGateDoor;
+
+  useFrame(() => {
+    if (ref.current) ref.current.visible = state.gateLocked;
+  });
+
+  if (!door) return null;
+  return (
+    <mesh ref={ref} position={[door.x + 0.5, 1.2, door.y + 0.5]} castShadow>
+      <boxGeometry args={[1, 2.4, 1]} />
+      <meshStandardMaterial color="#661a1a" emissive="#440000" emissiveIntensity={0.3} />
+    </mesh>
+  );
+}
 
 // One procedurally-generated floor at a time. `key={area}` on the gameplay
 // group below forces a full remount (fresh MapData + fresh GameState) when
@@ -60,6 +84,10 @@ function Floor1Gameplay({ area, initialSave, onStateReady }: { area: Area; initi
         {state.enemies.map((e) => (
           <Enemy key={e.id} state={state} enemyState={e} />
         ))}
+        {state.boss && <Boss state={state} bossState={state.boss} />}
+        <BossGateDoor state={state} />
+        <Hazards state={state} />
+        <Interactables state={state} input={input} />
         <Projectiles state={state} />
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} />
       </Canvas>

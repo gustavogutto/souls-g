@@ -1,4 +1,5 @@
 import { Floor, Area, AREA_CONFIGS } from "../utils/constants";
+import { SECRET_FIGHT_BY_AREA } from "../utils/secretFights";
 
 // Ported from Hohenberg's client/src/game/maps/MapGenerator.ts. This is a
 // trimmed core port: the room-placement/corridor-carving/floor-archetype/
@@ -38,6 +39,11 @@ export interface MapData {
   ashenFlameSpawn?: { x: number; y: number };
   startFlameSpawn?: { x: number; y: number };
   propSpawns: { x: number; y: number }[];
+  // The area's secret lever fight, if AREA_CONFIGS[...] has one configured
+  // (see utils/secretFights.ts) — a single tile, same "just a spot in a
+  // normal procedurally-generated room" precedent as ashenFlameSpawn, not a
+  // bespoke arena.
+  leverSpawn?: { x: number; y: number };
 }
 
 interface Room {
@@ -534,6 +540,16 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   if (!ashenFlameSpawn) ashenFlameSpawn = findFreeTileNear(flameRoom.center, [[0, 0]] as const, isFreeTile, markTileUsed);
   if (!ashenFlameSpawn) ashenFlameSpawn = findFreeTileNear(startRoom.center, [[0, 0]] as const, isFreeTile, markTileUsed);
 
+  // Secret lever fight (see utils/secretFights.ts) — one per area that has
+  // one configured, tucked into a normal room along the main path rather
+  // than a bespoke arena (same precedent as the boss/dragon rooms).
+  let leverSpawn: { x: number; y: number } | undefined;
+  if (SECRET_FIGHT_BY_AREA[area]) {
+    const leverRoom = pickRoomAtPathFraction(sortedMain, 0.65 + Math.random() * 0.15);
+    const leverOffsets = [[1, 1], [-1, -1], [1, -1], [-1, 1], [2, 0], [-2, 0], [0, 2], [0, -2], [0, 0]] as const;
+    leverSpawn = findFreeTileNear(leverRoom.center, leverOffsets, isFreeTile, markTileUsed);
+  }
+
   const doorSpawns: { x: number; y: number }[] = [];
   for (const tile of floorTiles) {
     if (doorSpawns.length >= (areaConfig.numDoors || 4)) break;
@@ -569,7 +585,7 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   return {
     tiles, width, height, playerSpawn, enemySpawns, chestSpawns, doorSpawns,
     bossSpawn, cellarStairs, endPoint, startPoint, bossGateDoor,
-    ashenFlameSpawn, startFlameSpawn, propSpawns,
+    ashenFlameSpawn, startFlameSpawn, propSpawns, leverSpawn,
   };
 }
 

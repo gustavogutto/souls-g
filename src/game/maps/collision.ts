@@ -12,9 +12,26 @@ export function isWallTile(mapData: MapData, tx: number, ty: number): boolean {
   return !tile || tile.type === "wall";
 }
 
+// Boss gate door (see MapData.bossGateDoor) — a plain floor tile that's only
+// solid while GameState.gateLocked is true, so it needs its own check rather
+// than being baked into the static tiles array (which DungeonRenderer's
+// geometry is memoized from, at generation time only).
+export function isGateBlocked(mapData: MapData, gateLocked: boolean, tx: number, ty: number): boolean {
+  if (!gateLocked || !mapData.bossGateDoor) return false;
+  return tx === mapData.bossGateDoor.x && ty === mapData.bossGateDoor.y;
+}
+
 // Resolves a circle (radius r, centered at pos) against every overlapping
 // wall cell by pushing it out along the shortest escape vector. Mutates pos.
-export function resolveCollision(mapData: MapData, pos: { x: number; z: number }, radius: number) {
+// extraBlocked lets a caller treat additional tiles as solid without those
+// tiles ever being "wall" in the static map data (currently just the boss
+// gate door).
+export function resolveCollision(
+  mapData: MapData,
+  pos: { x: number; z: number },
+  radius: number,
+  extraBlocked?: (tx: number, ty: number) => boolean
+) {
   for (let pass = 0; pass < 2; pass++) {
     const minTx = Math.floor(pos.x - radius);
     const maxTx = Math.floor(pos.x + radius);
@@ -22,7 +39,7 @@ export function resolveCollision(mapData: MapData, pos: { x: number; z: number }
     const maxTy = Math.floor(pos.z + radius);
     for (let ty = minTy; ty <= maxTy; ty++) {
       for (let tx = minTx; tx <= maxTx; tx++) {
-        if (!isWallTile(mapData, tx, ty)) continue;
+        if (!isWallTile(mapData, tx, ty) && !(extraBlocked && extraBlocked(tx, ty))) continue;
         const closestX = Math.max(tx, Math.min(pos.x, tx + 1));
         const closestZ = Math.max(ty, Math.min(pos.z, ty + 1));
         const dx = pos.x - closestX;
