@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type GameState, spawnFloatingText, enemyDamageForRole } from "./GameState";
+import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight } from "./GameState";
 import { computeWeaponDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction } from "./utils/equipment";
 import { CINDER_WRETCH_DETONATE_RADIUS, CINDER_WRETCH_DETONATE_DAMAGE_MULT } from "./utils/enemyRoles";
 import { STAMINA_REGEN_PER_SEC } from "./utils/constants";
@@ -129,7 +129,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         if (config.knockback) enemy.position.addScaledVector(toEnemy, config.knockback);
         if (config.stunMs) enemy.stunnedMs = Math.max(enemy.stunnedMs, config.stunMs);
         spawnFloatingText(state, `${dmg}`, enemy.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ffcc55");
-        if (enemy.hp <= 0) {
+        if (enemy.hp <= 0 && !handleSpecialEnemyDeath(state, enemy)) {
           enemy.aiState = "dead";
           spawnFloatingText(state, "SLAIN", enemy.position.clone().add(new THREE.Vector3(0, 2.4, 0)), "#ff5555");
           // Cinder Wretch — detonates on death regardless of kill method,
@@ -170,6 +170,8 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
 
       p.attackHitApplied = true;
     }
+
+    updateSecretFight(state);
 
     // Ground hazards (boss slam/breath patches) — flat per-second tick applied
     // while standing in the radius, same "no i-frame interaction" precedent

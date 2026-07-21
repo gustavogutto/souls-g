@@ -11,6 +11,7 @@ import { Player } from "./Player";
 import { Enemy } from "./Enemy";
 import { Boss } from "./Boss";
 import { Hazards } from "./Hazards";
+import { Interactables } from "./Interactables";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
@@ -86,6 +87,7 @@ function Floor1Gameplay({ area, initialSave, onStateReady }: { area: Area; initi
         {state.boss && <Boss state={state} bossState={state.boss} />}
         <BossGateDoor state={state} />
         <Hazards state={state} />
+        <Interactables state={state} input={input} />
         <Projectiles state={state} />
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} />
       </Canvas>
