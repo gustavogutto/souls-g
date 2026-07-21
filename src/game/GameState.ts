@@ -3,7 +3,7 @@ import { BASE_STATS, getMaxStamina, type PlayerStats } from "./utils/constants";
 import { ROLE_CONFIG, type EnemyRole } from "./utils/enemyRoles";
 import { getEffectiveMaxHP, type ItemUpgrades } from "./utils/equipment";
 import type { ItemSlot } from "./utils/items";
-import { ENEMY_BASE_DAMAGE } from "./gameConstants";
+import { ENEMY_BASE_DAMAGE, FLASK_START_CHARGES, type MeleeAction } from "./gameConstants";
 
 export interface PlayerState {
   stats: PlayerStats;
@@ -21,8 +21,11 @@ export interface PlayerState {
   attackCooldownMs: number;
   attackActiveMs: number; // >0 while the current swing's hit window is live
   attackHitApplied: boolean;
+  activeMelee: MeleeAction | null; // which swing is currently resolving (light/heavy/bash)
   hitFlashMs: number;
   dead: boolean;
+  flaskCharges: number;
+  maxFlaskCharges: number;
 }
 
 export type EnemyAIState = "idle" | "chase" | "windup" | "strike" | "recover" | "dead";
@@ -37,6 +40,7 @@ export interface EnemyState {
   aiState: EnemyAIState;
   stateElapsedMs: number;
   hitFlashMs: number;
+  stunnedMs: number; // externally-forced (shield bash) — overrides the normal state machine while > 0
 }
 
 export interface FloatingText {
@@ -76,8 +80,11 @@ export function createPlayerState(): PlayerState {
     attackCooldownMs: 0,
     attackActiveMs: 0,
     attackHitApplied: false,
+    activeMelee: null,
     hitFlashMs: 0,
     dead: false,
+    flaskCharges: FLASK_START_CHARGES,
+    maxFlaskCharges: FLASK_START_CHARGES,
   };
 }
 
@@ -94,6 +101,7 @@ export function createEnemyState(id: string, role: EnemyRole, position: THREE.Ve
     aiState: "idle",
     stateElapsedMs: 0,
     hitFlashMs: 0,
+    stunnedMs: 0,
   };
 }
 

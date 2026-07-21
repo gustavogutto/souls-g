@@ -67,8 +67,10 @@ export function HUD({ state }: { state: GameState }) {
 
       <div ref={logRef} style={{ position: "absolute", top: 20, left: 20, fontSize: 16, fontWeight: "bold", textShadow: "1px 1px 2px black" }} />
 
-      <div style={{ position: "absolute", bottom: 20, right: 20, fontSize: 11, opacity: 0.6, textAlign: "right", lineHeight: 1.6 }}>
-        WASD move · J attack · Space/K roll · Shift sprint
+      <div style={{ position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)", fontSize: 11, opacity: 0.55, textAlign: "center", lineHeight: 1.6 }}>
+        WASD move · I light / J heavy / L bash · Space roll · F heal · Shift sprint
+        <br />
+        (or the on-screen joystick + ROLL / ATK (hold for heavy) / SHLD / HEAL buttons)
       </div>
 
       <div

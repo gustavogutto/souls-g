@@ -35,6 +35,22 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
     const toPlayer = new THREE.Vector3().subVectors(p.position, e.position);
     const dist = toPlayer.length();
 
+    // Shield Bash knockback/stun overrides the normal state machine —
+    // vulnerable and inert until it expires, then falls back into chase/idle.
+    if (e.stunnedMs > 0) {
+      e.stunnedMs = Math.max(0, e.stunnedMs - dtMs);
+      groupRef.current.visible = true;
+      groupRef.current.position.set(e.position.x, 0, e.position.z);
+      const mat = bodyRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissive.setHex(e.hitFlashMs > 0 ? 0xffffff : 0x4444ff);
+      telegraphRef.current.visible = false;
+      if (e.stunnedMs <= 0) {
+        e.aiState = dist < cfg.aggroRadius * 1.6 ? "chase" : "idle";
+        e.stateElapsedMs = 0;
+      }
+      return;
+    }
+
     switch (e.aiState) {
       case "idle":
         if (dist < cfg.aggroRadius) {

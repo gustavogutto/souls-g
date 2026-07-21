@@ -1,16 +1,17 @@
 import { useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { createGameState } from "./GameState";
-import { useKeyboard } from "./useKeyboard";
+import { useGameInput } from "./input";
 import { Arena } from "./Arena";
 import { Player } from "./Player";
 import { Enemy } from "./Enemy";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
+import { TouchControls } from "./TouchControls";
 
 export function GameScene() {
   const stateRef = useRef(createGameState());
-  const keys = useKeyboard();
+  const input = useGameInput();
   const state = stateRef.current;
 
   return (
@@ -29,13 +30,14 @@ export function GameScene() {
         <pointLight position={[0, 6, 0]} intensity={0.4} color="#ffcc88" />
 
         <Arena />
-        <Player state={state} keys={keys} />
+        <Player state={state} input={input} />
         {state.enemies.map((e) => (
           <Enemy key={e.id} state={state} enemyState={e} />
         ))}
         <CameraRig state={state} />
       </Canvas>
       <HUD state={state} />
+      <TouchControls input={input} state={state} />
     </div>
   );
 }
