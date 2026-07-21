@@ -29,3 +29,8 @@ export const ATK_HEAVY_HOLD_MS = 200;
 // starting charges, no refill mechanic yet (no rest points/area-clears here).
 export const FLASK_START_CHARGES = 3;
 export const FLASK_HEAL_FRACTION = 0.4;
+
+// Matches Hohenberg's PROJECTILE_POOL_SIZE — archer/toad shots today,
+// spell projectiles will share this same pool once phase 8 lands. Spawning
+// past this cap silently drops the shot (same precedent as the source).
+export const PROJECTILE_POOL_SIZE = 24;

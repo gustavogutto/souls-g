@@ -3,7 +3,7 @@ import { BASE_STATS, getMaxStamina, type Area, type PlayerStats } from "./utils/
 import { ROLE_CONFIG, roleForType, type EnemyRole } from "./utils/enemyRoles";
 import { getEffectiveMaxHP, type ItemUpgrades } from "./utils/equipment";
 import type { ItemSlot } from "./utils/items";
-import { ENEMY_BASE_DAMAGE, FLASK_START_CHARGES, type MeleeAction } from "./gameConstants";
+import { ENEMY_BASE_DAMAGE, FLASK_START_CHARGES, PROJECTILE_POOL_SIZE, type MeleeAction } from "./gameConstants";
 import type { MapData } from "./maps/MapGenerator";
 
 export interface PlayerState {
@@ -29,7 +29,7 @@ export interface PlayerState {
   maxFlaskCharges: number;
 }
 
-export type EnemyAIState = "idle" | "chase" | "windup" | "strike" | "recover" | "dead";
+export type EnemyAIState = "idle" | "chase" | "windup" | "strike" | "recover" | "retreat" | "cower" | "dead";
 
 export interface EnemyState {
   id: string;
@@ -44,6 +44,54 @@ export interface EnemyState {
   stunnedMs: number; // externally-forced (shield bash) — overrides the normal state machine while > 0
   path: { x: number; y: number }[]; // BFS waypoints (tile-center coords), consumed front-to-back
   repathMs: number; // countdown until the next repath attempt is allowed
+
+  // Locked at windup start — lunge targets, and ranged/toad shot aim, always
+  // fire at where the player WAS at windup start, not a live position.
+  windupTargetX: number;
+  windupTargetZ: number;
+  lungeFromX: number;
+  lungeFromZ: number;
+  hasDealtDamageThisStrike: boolean;
+  hasFiredThisStrike: boolean;
+
+  // Archer/wyrmling (moveShape "ranged") only.
+  losClear: boolean;
+  losRecheckMs: number;
+  sidestepTargetX?: number;
+  sidestepTargetZ?: number;
+  sidestepCooldownMs: number;
+
+  // Wolf only.
+  wolfCircleDir: 1 | -1 | 0; // 0 = not yet rolled this engagement
+  wolfCircleRadius: number; // 0 = not yet rolled this bout
+  wolfCommitElapsedMs: number;
+  wolfCommitThresholdMs: number; // 0 = not yet rolled this bout
+  wolfHopFromX: number;
+  wolfHopFromZ: number;
+  wolfHopTargetX: number;
+  wolfHopTargetZ: number;
+  wolfHopValid: boolean;
+
+  // Toad only.
+  toadHopping: boolean;
+  toadHopElapsedMs: number;
+  toadPauseElapsedMs: number;
+  toadHopFromX: number;
+  toadHopFromZ: number;
+  toadHopTargetX: number;
+  toadHopTargetZ: number;
+}
+
+export interface ProjectileState {
+  id: number;
+  position: THREE.Vector3;
+  dir: THREE.Vector3; // normalized, XZ plane
+  speed: number; // units/sec
+  damage: number;
+  traveled: number;
+  maxRange: number;
+  arcHeight?: number; // toad lob visual only — the x/z motion is a flat lerp either way
+  color: string;
 }
 
 export interface FloatingText {
@@ -59,6 +107,8 @@ export interface GameState {
   area: Area;
   player: PlayerState;
   enemies: EnemyState[];
+  projectiles: ProjectileState[];
+  nextProjectileId: number;
   floatingText: FloatingText[];
   nextTextId: number;
 }
@@ -109,6 +159,31 @@ export function createEnemyState(id: string, role: EnemyRole, position: THREE.Ve
     stunnedMs: 0,
     path: [],
     repathMs: 0,
+    windupTargetX: 0,
+    windupTargetZ: 0,
+    lungeFromX: 0,
+    lungeFromZ: 0,
+    hasDealtDamageThisStrike: false,
+    hasFiredThisStrike: false,
+    losClear: true,
+    losRecheckMs: 0,
+    sidestepCooldownMs: 0,
+    wolfCircleDir: 0,
+    wolfCircleRadius: 0,
+    wolfCommitElapsedMs: 0,
+    wolfCommitThresholdMs: 0,
+    wolfHopFromX: 0,
+    wolfHopFromZ: 0,
+    wolfHopTargetX: 0,
+    wolfHopTargetZ: 0,
+    wolfHopValid: false,
+    toadHopping: false,
+    toadHopElapsedMs: 0,
+    toadPauseElapsedMs: 9999,
+    toadHopFromX: 0,
+    toadHopFromZ: 0,
+    toadHopTargetX: 0,
+    toadHopTargetZ: 0,
   };
 }
 
@@ -126,9 +201,37 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     area,
     player: createPlayerState(mapData.playerSpawn),
     enemies,
+    projectiles: [],
+    nextProjectileId: 0,
     floatingText: [],
     nextTextId: 0,
   };
+}
+
+// Matches Hohenberg's pool precedent — spawning past the cap silently drops
+// the shot rather than growing an unbounded array.
+export function spawnProjectile(
+  state: GameState,
+  origin: THREE.Vector3,
+  dir: THREE.Vector3,
+  speed: number,
+  damage: number,
+  maxRange: number,
+  color: string,
+  arcHeight?: number
+) {
+  if (state.projectiles.length >= PROJECTILE_POOL_SIZE) return;
+  state.projectiles.push({
+    id: state.nextProjectileId++,
+    position: origin.clone(),
+    dir: dir.clone(),
+    speed,
+    damage,
+    traveled: 0,
+    maxRange,
+    arcHeight,
+    color,
+  });
 }
 
 export function spawnFloatingText(state: GameState, text: string, position: THREE.Vector3, color: string) {

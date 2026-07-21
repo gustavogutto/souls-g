@@ -2,8 +2,9 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type GameState, spawnFloatingText } from "./GameState";
-import { computeWeaponDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction } from "./utils/equipment";
+import { type GameState, spawnFloatingText, enemyDamageForRole } from "./GameState";
+import { computeWeaponDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction } from "./utils/equipment";
+import { CINDER_WRETCH_DETONATE_RADIUS, CINDER_WRETCH_DETONATE_DAMAGE_MULT } from "./utils/enemyRoles";
 import { STAMINA_REGEN_PER_SEC } from "./utils/constants";
 import {
   PLAYER_SPEED,
@@ -130,6 +131,19 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         if (enemy.hp <= 0) {
           enemy.aiState = "dead";
           spawnFloatingText(state, "SLAIN", enemy.position.clone().add(new THREE.Vector3(0, 2.4, 0)), "#ff5555");
+          // Cinder Wretch — detonates on death regardless of kill method,
+          // damaging the player if they're standing too close.
+          if (enemy.role === "cinder_wretch") {
+            const blastDist = enemy.position.distanceTo(p.position);
+            if (blastDist <= CINDER_WRETCH_DETONATE_RADIUS && !p.rolling) {
+              const raw = Math.round(enemyDamageForRole(enemy) * CINDER_WRETCH_DETONATE_DAMAGE_MULT);
+              const blastDmg = applyDamageReduction(raw, p.equipped, p.upgrades);
+              p.hp = Math.max(0, p.hp - blastDmg);
+              p.hitFlashMs = 200;
+              spawnFloatingText(state, `${blastDmg}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ff8800");
+              if (p.hp <= 0) p.dead = true;
+            }
+          }
         }
       }
       p.attackHitApplied = true;

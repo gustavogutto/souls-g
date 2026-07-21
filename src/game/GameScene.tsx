@@ -8,6 +8,7 @@ import { Floor, Area, AREA_CONFIGS } from "./utils/constants";
 import { DungeonRenderer } from "./DungeonRenderer";
 import { Player } from "./Player";
 import { Enemy } from "./Enemy";
+import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
 import { TouchControls } from "./TouchControls";
@@ -41,6 +42,7 @@ function Floor1Gameplay({ area }: { area: Area }) {
         {state.enemies.map((e) => (
           <Enemy key={e.id} state={state} enemyState={e} />
         ))}
+        <Projectiles state={state} />
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} />
       </Canvas>
       <HUD state={state} />
