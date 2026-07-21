@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
-import { createGameState } from "./GameState";
+import { createGameState, type GameState } from "./GameState";
 import { useGameInput } from "./input";
 import { generateMap } from "./maps/MapGenerator";
 import { Floor, Area, AREA_CONFIGS } from "./utils/constants";
@@ -13,18 +13,36 @@ import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
 import { TouchControls } from "./TouchControls";
 import { AreaDebugPicker } from "./AreaDebugPicker";
+import { InventoryPanel } from "./InventoryPanel";
+import { loadGame, saveGame, applySaveData, type SaveData } from "./saveGame";
+
+const AUTOSAVE_INTERVAL_MS = 5000;
 
 // One procedurally-generated floor at a time. `key={area}` on the gameplay
 // group below forces a full remount (fresh MapData + fresh GameState) when
 // the area changes — simpler and safer than trying to hot-swap state inside
 // a live Player/Enemy tree, and area switches are rare (dev testing today,
 // the real Ashen Flame travel system later).
-function Floor1Gameplay({ area }: { area: Area }) {
+function Floor1Gameplay({ area, initialSave, onStateReady }: { area: Area; initialSave: SaveData | null; onStateReady: (state: GameState) => void }) {
   const dungeonGroupRef = useRef<THREE.Group>(null!);
   const mapData = useMemo(() => generateMap(Floor.BASEMENT, area), [area]);
-  const stateRef = useRef(createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier));
+  const [state] = useState<GameState>(() => {
+    const s = createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier);
+    if (initialSave && initialSave.area === area) applySaveData(s, initialSave);
+    return s;
+  });
   const input = useGameInput();
-  const state = stateRef.current;
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+
+  useEffect(() => {
+    onStateReady(state);
+    const interval = setInterval(() => saveGame(state), AUTOSAVE_INTERVAL_MS);
+    return () => {
+      clearInterval(interval);
+      saveGame(state);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
@@ -46,18 +64,34 @@ function Floor1Gameplay({ area }: { area: Area }) {
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} />
       </Canvas>
       <HUD state={state} />
-      <TouchControls input={input} state={state} />
+      <TouchControls input={input} state={state} onToggleInventory={() => setInventoryOpen((o) => !o)} />
+      <InventoryPanel state={state} open={inventoryOpen} setOpen={setInventoryOpen} />
     </>
   );
 }
 
 export function GameScene() {
-  const [area, setArea] = useState<Area>(Area.AREA_1);
+  const initialSave = useMemo(() => loadGame(), []);
+  const [area, setArea] = useState<Area>(initialSave?.area ?? Area.AREA_1);
+  const liveStateRef = useRef<GameState | null>(null);
+
+  const handleAreaChange = (next: Area) => {
+    if (liveStateRef.current) saveGame(liveStateRef.current);
+    liveStateRef.current = null;
+    setArea(next);
+  };
 
   return (
     <div style={{ position: "relative", width: "100vw", height: "100vh", background: "#0a0a12" }}>
-      <Floor1Gameplay key={area} area={area} />
-      <AreaDebugPicker area={area} onChange={setArea} />
+      <Floor1Gameplay
+        key={area}
+        area={area}
+        initialSave={initialSave}
+        onStateReady={(state) => {
+          liveStateRef.current = state;
+        }}
+      />
+      <AreaDebugPicker area={area} onChange={handleAreaChange} />
     </div>
   );
 }

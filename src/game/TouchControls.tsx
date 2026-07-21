@@ -158,7 +158,7 @@ function ActionButton({
   );
 }
 
-export function TouchControls({ input, state }: { input: GameInput; state: GameState }) {
+export function TouchControls({ input, state, onToggleInventory }: { input: GameInput; state: GameState; onToggleInventory: () => void }) {
   const [flaskCharges, setFlaskCharges] = useState(state.player.flaskCharges);
 
   useEffect(() => {
@@ -205,6 +205,8 @@ export function TouchControls({ input, state }: { input: GameInput; state: GameS
         onTap={() => (input.actions.current.attackLight = true)}
         onHoldReached={() => (input.actions.current.attackHeavy = true)}
       />
+
+      <ActionButton label="INV" color="#c9a84c" style={{ right: 20, top: 56, width: 44, height: 44 }} onTap={onToggleInventory} />
     </div>
   );
 }

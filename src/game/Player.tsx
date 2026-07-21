@@ -29,7 +29,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
 
   useFrame((_, dt) => {
     const p = state.player;
-    if (p.dead) return;
+    if (p.dead || state.paused) return;
     const dtMs = dt * 1000;
     const axes = input.axes.current;
     const joy = input.joystick.current;

@@ -10,6 +10,7 @@ export interface PlayerState {
   stats: PlayerStats;
   equipped: Partial<Record<ItemSlot, string>>;
   upgrades: ItemUpgrades;
+  inventory: string[]; // flat carried-item ids, same no-instance-identity model as the source game
   position: THREE.Vector3;
   facing: number; // radians in the XZ plane, 0 = +Z (south)
   hp: number;
@@ -105,6 +106,7 @@ export interface FloatingText {
 export interface GameState {
   mapData: MapData;
   area: Area;
+  paused: boolean; // set true while a full-screen UI panel (inventory, etc) is open
   player: PlayerState;
   enemies: EnemyState[];
   projectiles: ProjectileState[];
@@ -123,6 +125,9 @@ export function createPlayerState(spawn: { x: number; y: number }): PlayerState 
     stats,
     equipped,
     upgrades,
+    // Temporary starter items so the equip-only inventory panel (phase 4)
+    // has something to show before chests grant real loot (phase 5).
+    inventory: ["chainmail_armor", "fallen_knight_helm", "leather_pants", "wanderers_ring", "travelers_pendant"],
     position: new THREE.Vector3(spawn.x + 0.5, 0, spawn.y + 0.5),
     facing: 0,
     hp: maxHp,
@@ -199,6 +204,7 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
   return {
     mapData,
     area,
+    paused: false,
     player: createPlayerState(mapData.playerSpawn),
     enemies,
     projectiles: [],

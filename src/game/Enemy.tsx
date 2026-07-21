@@ -295,6 +295,7 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
       groupRef.current.visible = false;
       return;
     }
+    if (state.paused) return;
     const dtMs = dt * 1000;
     const cfg = ROLE_CONFIG[e.role];
     if (e.hitFlashMs > 0) e.hitFlashMs = Math.max(0, e.hitFlashMs - dtMs);

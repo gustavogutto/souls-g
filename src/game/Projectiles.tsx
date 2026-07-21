@@ -16,6 +16,7 @@ export function Projectiles({ state }: { state: GameState }) {
   const meshRefs = useRef<(Mesh | null)[]>([]);
 
   useFrame((_, dt) => {
+    if (state.paused) return;
     const list = state.projectiles;
     const p = state.player;
 
