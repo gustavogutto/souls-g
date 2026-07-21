@@ -16,10 +16,11 @@ import {
   FLASK_HEAL_FRACTION,
   type MeleeAction,
 } from "./gameConstants";
-import { ARENA_HALF_SIZE } from "./Arena";
+import { resolveCollision } from "./maps/collision";
 import type { GameInput } from "./input";
 
 const ATTACK_ARC_COS = Math.cos((70 * Math.PI) / 180); // +/-70 deg frontal cone
+const PLAYER_RADIUS = 0.35;
 
 export function Player({ state, input }: { state: GameState; input: GameInput }) {
   const groupRef = useRef<Group>(null!);
@@ -134,10 +135,8 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
       p.attackHitApplied = true;
     }
 
-    // Clamp to arena
-    const bound = ARENA_HALF_SIZE - 1;
-    p.position.x = THREE.MathUtils.clamp(p.position.x, -bound, bound);
-    p.position.z = THREE.MathUtils.clamp(p.position.z, -bound, bound);
+    // Tile-grid collision (walls resolved against the 2D grid, not the 3D mesh)
+    resolveCollision(state.mapData, p.position, PLAYER_RADIUS);
 
     // Push to the render objects
     groupRef.current.position.set(p.position.x, 0, p.position.z);

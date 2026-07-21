@@ -5,17 +5,29 @@ import type { Mesh, Group } from "three";
 import { type EnemyState, type GameState, enemyDamageForRole, spawnFloatingText } from "./GameState";
 import { ROLE_CONFIG } from "./utils/enemyRoles";
 import { applyDamageReduction } from "./utils/equipment";
+import { hasLineOfSight } from "./utils/lineOfSight";
+import { isWallTile, resolveCollision } from "./maps/collision";
+import { findPath } from "./maps/pathfinding";
 
-const ROLE_COLOR: Record<string, string> = {
-  soldier: "#8a3a3a",
-  brute: "#5a3a7a",
-  swarmer: "#3a7a5a",
-};
+const ENEMY_RADIUS = 0.4;
+const REPATH_INTERVAL_MS = 500;
+
+// Deterministic per-role color so all 21 roles (not just the 3 wired so far)
+// read as visually distinct once phase 2 spawns the rest, without needing a
+// per-role art pass yet.
+function colorForRole(role: string): string {
+  let hash = 0;
+  for (let i = 0; i < role.length; i++) hash = (hash * 31 + role.charCodeAt(i)) >>> 0;
+  const hue = hash % 360;
+  return `hsl(${hue}, 45%, 35%)`;
+}
 
 // Idle -> chase -> windup -> strike -> recover, driven by the exact
 // ROLE_CONFIG timings/ranges ported from Hohenberg's enemyRoles.ts. Move
-// shape (lunge/aoe/ranged) is not yet differentiated in this first 3D slice —
-// every role uses the same single-target frontal strike for now.
+// shape (lunge/aoe/ranged/toad) is not yet differentiated (phase 2 of the 3D
+// conversion plan) — every role uses the same single-target frontal strike
+// for now. Chase navigation is real, though: direct line-of-sight movement
+// when clear, a throttled BFS grid path around corners when it isn't.
 export function Enemy({ state, enemyState }: { state: GameState; enemyState: EnemyState }) {
   const groupRef = useRef<Group>(null!);
   const bodyRef = useRef<Mesh>(null!);
@@ -62,11 +74,33 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
         if (dist <= cfg.attackRange) {
           e.aiState = "windup";
           e.stateElapsedMs = 0;
+          e.path = [];
         } else if (dist > cfg.aggroRadius * 1.6) {
           e.aiState = "idle";
+          e.path = [];
         } else {
-          toPlayer.normalize();
-          e.position.addScaledVector(toPlayer, cfg.moveSpeed * dt);
+          const mapData = state.mapData;
+          const clearLOS = hasLineOfSight(e.position.x, e.position.z, p.position.x, p.position.z, (tx, ty) => isWallTile(mapData, tx, ty));
+          let moveDir = new THREE.Vector3();
+          if (clearLOS) {
+            e.path = [];
+            moveDir = toPlayer.clone().setY(0).normalize();
+          } else {
+            e.repathMs -= dtMs;
+            if (e.path.length === 0 && e.repathMs <= 0) {
+              const found = findPath(mapData, { x: e.position.x, y: e.position.z }, { x: p.position.x, y: p.position.z });
+              e.path = found ?? [];
+              e.repathMs = REPATH_INTERVAL_MS;
+            }
+            if (e.path.length > 0) {
+              const wp = e.path[0];
+              const toWp = new THREE.Vector3(wp.x - e.position.x, 0, wp.y - e.position.z);
+              if (toWp.length() < 0.25) e.path.shift();
+              if (toWp.length() > 0.01) moveDir = toWp.normalize();
+            }
+          }
+          e.position.addScaledVector(moveDir, cfg.moveSpeed * dt);
+          resolveCollision(mapData, e.position, ENEMY_RADIUS);
         }
         break;
       }
@@ -118,13 +152,13 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
   });
 
   const cfg = ROLE_CONFIG[enemyState.role];
-  const size = enemyState.role === "brute" ? 1.3 : enemyState.role === "swarmer" ? 0.7 : 1.0;
+  const size = THREE.MathUtils.clamp(0.7 + cfg.hpMultiplier * 0.3, 0.6, 1.6);
 
   return (
     <group ref={groupRef} position={[enemyState.position.x, 0, enemyState.position.z]}>
       <mesh ref={bodyRef} position={[0, 0.9 * size, 0]} castShadow>
         <capsuleGeometry args={[0.4 * size, 0.8 * size, 4, 8]} />
-        <meshStandardMaterial color={ROLE_COLOR[enemyState.role] ?? "#8a3a3a"} emissive="#000000" />
+        <meshStandardMaterial color={colorForRole(enemyState.role)} emissive="#000000" />
       </mesh>
       <mesh ref={telegraphRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} visible={false}>
         <ringGeometry args={[cfg.attackRange - 0.1, cfg.attackRange, 24]} />
