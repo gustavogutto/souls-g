@@ -1,10 +1,10 @@
 import { Area, AREA_CONFIGS } from "./utils/constants";
 
-// Dev/testing control — no real Ashen Flame travel system exists yet
-// (that's phase 9 of the 3D conversion plan), but every area's procedural
-// generation needs exercising now, not just Area 1. Regenerates the whole
-// floor (fresh MapData + fresh GameState) on change.
-const AREAS = [Area.AREA_1, Area.AREA_2, Area.AREA_3, Area.AREA_4, Area.AREA_5];
+// Dev/testing control — a quicker way to jump straight to any area than
+// walking the Hearth's gates every time (see HearthGates.tsx for the real
+// phase-9 travel system). Regenerates the whole floor (fresh MapData + fresh
+// GameState) on change.
+const AREAS = [Area.HEARTH, Area.PROLOGUE, Area.AREA_1, Area.AREA_2, Area.AREA_3, Area.AREA_4, Area.AREA_5];
 
 export function AreaDebugPicker({ area, onChange }: { area: Area; onChange: (a: Area) => void }) {
   return (

@@ -4,7 +4,7 @@ import * as THREE from "three";
 import type { Mesh } from "three";
 import { createGameState, type GameState } from "./GameState";
 import { useGameInput } from "./input";
-import { generateMap } from "./maps/MapGenerator";
+import { generateMap, generateHearthMap } from "./maps/MapGenerator";
 import { Floor, Area, AREA_CONFIGS } from "./utils/constants";
 import { DungeonRenderer } from "./DungeonRenderer";
 import { Player } from "./Player";
@@ -12,6 +12,7 @@ import { Enemy } from "./Enemy";
 import { Boss } from "./Boss";
 import { Hazards } from "./Hazards";
 import { Interactables } from "./Interactables";
+import { HearthGates, HEARTH_GATE_LABELS } from "./HearthGates";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
@@ -42,14 +43,30 @@ function BossGateDoor({ state }: { state: GameState }) {
   );
 }
 
-// One procedurally-generated floor at a time. `key={area}` on the gameplay
-// group below forces a full remount (fresh MapData + fresh GameState) when
-// the area changes — simpler and safer than trying to hot-swap state inside
-// a live Player/Enemy tree, and area switches are rare (dev testing today,
-// the real Ashen Flame travel system later).
-function Floor1Gameplay({ area, initialSave, onStateReady }: { area: Area; initialSave: SaveData | null; onStateReady: (state: GameState) => void }) {
+// Watches GameState.reachedEnd (set by Player.tsx once the player steps onto
+// the end_portal tile) and fires onReachEnd exactly once — mirrors the
+// pulse-consumption pattern Interactables.tsx uses for the "E" action, just
+// framed as a one-shot ref guard since reachedEnd itself isn't reset (the
+// whole GameState is discarded on area change anyway, via Floor1Gameplay's
+// key={area} remount). No-op on the Hearth's own map, which never sets it.
+function EndPortalWatcher({ state, onReachEnd }: { state: GameState; onReachEnd: () => void }) {
+  const fired = useRef(false);
+  useFrame(() => {
+    if (state.reachedEnd && !fired.current) {
+      fired.current = true;
+      onReachEnd();
+    }
+  });
+  return null;
+}
+
+// One procedurally-generated floor (or the hand-authored Hearth) at a time.
+// `key={area}` on the gameplay group below forces a full remount (fresh
+// MapData + fresh GameState) when the area changes — simpler and safer than
+// trying to hot-swap state inside a live Player/Enemy tree.
+function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { area: Area; initialSave: SaveData | null; onStateReady: (state: GameState) => void; onAreaChange: (a: Area) => void }) {
   const dungeonGroupRef = useRef<THREE.Group>(null!);
-  const mapData = useMemo(() => generateMap(Floor.BASEMENT, area), [area]);
+  const mapData = useMemo(() => (area === Area.HEARTH ? generateHearthMap() : generateMap(Floor.BASEMENT, area)), [area]);
   const [state] = useState<GameState>(() => {
     const s = createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier);
     if (initialSave && initialSave.area === area) applySaveData(s, initialSave);
@@ -57,6 +74,7 @@ function Floor1Gameplay({ area, initialSave, onStateReady }: { area: Area; initi
   });
   const input = useGameInput();
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const gateLabels = area === Area.HEARTH ? HEARTH_GATE_LABELS(state) : [];
 
   useEffect(() => {
     onStateReady(state);
@@ -88,10 +106,19 @@ function Floor1Gameplay({ area, initialSave, onStateReady }: { area: Area; initi
         <BossGateDoor state={state} />
         <Hazards state={state} />
         <Interactables state={state} input={input} />
+        <HearthGates state={state} input={input} onTravel={onAreaChange} />
+        <EndPortalWatcher state={state} onReachEnd={() => onAreaChange(Area.HEARTH)} />
         <Projectiles state={state} />
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} />
       </Canvas>
       <HUD state={state} />
+      {gateLabels.length > 0 && (
+        <div style={{ position: "absolute", top: 90, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 18, fontFamily: "Georgia, serif", fontSize: 11, color: "#e8e0d4", opacity: 0.75, textShadow: "1px 1px 2px black", pointerEvents: "none" }}>
+          {gateLabels.map((g) => (
+            <span key={g.x}>{g.label}</span>
+          ))}
+        </div>
+      )}
       <TouchControls input={input} state={state} onToggleInventory={() => setInventoryOpen((o) => !o)} />
       <InventoryPanel state={state} open={inventoryOpen} setOpen={setInventoryOpen} />
     </>
@@ -100,7 +127,7 @@ function Floor1Gameplay({ area, initialSave, onStateReady }: { area: Area; initi
 
 export function GameScene() {
   const initialSave = useMemo(() => loadGame(), []);
-  const [area, setArea] = useState<Area>(initialSave?.area ?? Area.AREA_1);
+  const [area, setArea] = useState<Area>(initialSave?.area ?? Area.HEARTH);
   const liveStateRef = useRef<GameState | null>(null);
 
   const handleAreaChange = (next: Area) => {
@@ -118,6 +145,7 @@ export function GameScene() {
         onStateReady={(state) => {
           liveStateRef.current = state;
         }}
+        onAreaChange={handleAreaChange}
       />
       <AreaDebugPicker area={area} onChange={handleAreaChange} />
     </div>

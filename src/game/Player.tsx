@@ -198,6 +198,17 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     // the boss gate door additionally blocks passage while the area's boss is alive.
     resolveCollision(state.mapData, p.position, PLAYER_RADIUS, (tx, ty) => isGateBlocked(state.mapData, state.gateLocked, tx, ty));
 
+    // Reached the end portal (only ever reachable once the boss gate has
+    // unlocked, since the gate physically blocks the path there while the
+    // boss is alive) — GameScene watches this flag and travels back to the
+    // Hearth. No-op on the Hearth's own map, which sets no endPoint.
+    if (!state.reachedEnd && state.mapData.endPoint) {
+      const ep = state.mapData.endPoint;
+      const dx = ep.x + 0.5 - p.position.x;
+      const dz = ep.y + 0.5 - p.position.z;
+      if (Math.hypot(dx, dz) <= 0.6) state.reachedEnd = true;
+    }
+
     // Push to the render objects
     groupRef.current.position.set(p.position.x, 0, p.position.z);
     groupRef.current.rotation.y = p.facing;

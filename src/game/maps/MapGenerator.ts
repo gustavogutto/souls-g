@@ -44,6 +44,10 @@ export interface MapData {
   // normal procedurally-generated room" precedent as ashenFlameSpawn, not a
   // bespoke arena.
   leverSpawn?: { x: number; y: number };
+  // Hearth-only (see generateHearthMap): one gate per travel destination,
+  // rendered/interacted by HearthGates.tsx. Undefined on every normal
+  // procedurally-generated floor.
+  areaGates?: { x: number; y: number; area: Area; label: string }[];
 }
 
 interface Room {
@@ -607,5 +611,43 @@ export function generateCellarMap(area: Area): MapData {
     enemySpawns: [{ x: center, y: center, type: "enemy_elite_ward" }],
     chestSpawns: [{ x: center, y: 2, itemId: chestItemId }],
     doorSpawns: [], propSpawns: [],
+  };
+}
+
+const HEARTH_SIZE = 21;
+// One gate per travel destination, evenly spaced along the far wall — a
+// flat hand-authored room (same "not procedural" precedent as
+// generateCellarMap above) rather than running the labyrinth generator with
+// an empty AREA_CONFIGS[HEARTH].enemyTypes, which would place undefined-type
+// enemy spawns (the generator always carves normal/dead-end rooms per the
+// floor archetype regardless of area, with no way to ask for zero).
+const HEARTH_GATES: { x: number; area: Area; label: string }[] = [
+  { x: 3, area: Area.PROLOGUE, label: "The Nameless Shore" },
+  { x: 6, area: Area.AREA_1, label: "The Frozen Depths" },
+  { x: 9, area: Area.AREA_2, label: "The Sunken Courtyard" },
+  { x: 12, area: Area.AREA_3, label: "The Molten Sanctum" },
+  { x: 15, area: Area.AREA_4, label: "The Hollow Spire" },
+  { x: 18, area: Area.AREA_5, label: "The Sundered Sky" },
+];
+
+// The Ashen Hearth — phase 9's real travel hub. No enemies, no chests, no
+// boss; just a bounded room with a gate per area. Player spawns at the south
+// wall facing the row of gates along the north wall.
+export function generateHearthMap(): MapData {
+  const size = HEARTH_SIZE;
+  const tiles: TileData[] = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const isWall = x === 0 || y === 0 || x === size - 1 || y === size - 1;
+      tiles.push({ x, y, type: isWall ? "wall" : "floor" });
+    }
+  }
+  const playerSpawn = { x: Math.floor(size / 2), y: size - 4 };
+  const areaGates = HEARTH_GATES.map((g) => ({ x: g.x, y: 3, area: g.area, label: g.label }));
+
+  return {
+    tiles, width: size, height: size, playerSpawn, startPoint: { ...playerSpawn },
+    enemySpawns: [], chestSpawns: [], doorSpawns: [], propSpawns: [],
+    areaGates,
   };
 }

@@ -263,6 +263,12 @@ export enum Area {
   // previously-locked "4 areas, no expansion" rule (user's explicit,
   // confirmed choice, not an oversight). The final area/boss.
   AREA_5 = 5,  // The Sundered Sky
+  // Session brief N6 — The Nameless Shore, the Tidewarden's prologue.
+  // bossData.ts/enemyRoles.ts/items.ts already carried the full design
+  // (moves, Husk/Warden roles, chest loot); this just gives it a real,
+  // reachable area slot (see Boss.tsx's old "not reachable from any
+  // current AREA_CONFIGS entry" comment).
+  PROLOGUE = 6,
 }
 
 export interface AreaConfig {
@@ -384,5 +390,25 @@ export const AREA_CONFIGS: Record<Area, AreaConfig> = {
     numDoors: 6,
     enemyTypes: ["enemy_gargoyle", "enemy_wyrmling", "enemy_chasm_strider"],
     chestItems: ["skyguard_greatsword", "wyrmscale_plate", "hollowed_talon_ring", "wyrmclaw_gauntlets", "sundered_sigil", "greater_flask", "grand_flask", "crimson_elixir", "greater_stamina_tonic", "ancient_runes", "stat_shard", "hearthlance", "gravewake"],
+  },
+  // The Nameless Shore — session brief N6 prologue. Tuned well below Area 1
+  // on size/roster (short, two enemy types) but the Tidewarden itself hits
+  // hard (bossData.ts's own tuning notes: ~50-60% of level-1 HP per hit) —
+  // teaches respect for boss mechanics without a long dungeon crawl first.
+  [Area.PROLOGUE]: {
+    name: "The Nameless Shore",
+    theme: "drowned_shore",
+    enemyHPMultiplier: 0.7,
+    enemyDamageMultiplier: 0.7,
+    bossType: "boss_tidewarden",
+    bossHP: 1000, // matches bossData.ts's TIDEWARDEN_BASE_HP
+    bossDamage: 200, // matches bossData.ts's TIDEWARDEN_BASE_DAMAGE
+    bossName: "THE TIDEWARDEN",
+    mapSize: 30,
+    numRooms: 3,
+    numChests: 4,
+    numDoors: 2,
+    enemyTypes: ["enemy_drowned_husk", "enemy_drowned_warden"],
+    chestItems: ["tideworn_blade", "wreckboard", "wardenband", "wardensteel_sword", "wardens_aegis", "wardensteel_scrap"],
   },
 };

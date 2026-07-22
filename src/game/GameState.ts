@@ -188,6 +188,10 @@ export interface GameState {
   // alive, forcing the fight instead of letting the player route around it
   // to the end room. Irrelevant (stays false) for areas with no boss.
   gateLocked: boolean;
+  // Set once the player steps onto mapData.endPoint's "end_portal" tile (see
+  // Player.tsx) — GameScene watches this to travel back to the Hearth.
+  // Always false on the Hearth's own map (generateHearthMap sets no endPoint).
+  reachedEnd: boolean;
   projectiles: ProjectileState[];
   nextProjectileId: number;
   floatingText: FloatingText[];
@@ -348,6 +352,7 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     hazards: [],
     nextHazardId: 0,
     gateLocked: !!(boss && mapData.bossGateDoor),
+    reachedEnd: false,
     projectiles: [],
     nextProjectileId: 0,
     floatingText: [],

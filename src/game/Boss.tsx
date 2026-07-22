@@ -34,10 +34,9 @@ function stepBossToward(boss: BossState, targetX: number, targetZ: number, dt: n
 }
 
 // Random pick among the boss's move pool, except the Tidewarden (the
-// prologue tutorial boss — not reachable from any current AREA_CONFIGS entry,
-// but its data/trigger is honored here in case a future area assigns it):
-// hugging its legs or healing within the punish window forces its grab
-// instead of the normal random arc/slam/sweep pick.
+// Nameless Shore prologue boss, Area.PROLOGUE): hugging its legs or healing
+// within the punish window forces its grab instead of the normal random
+// arc/slam/sweep pick.
 function pickBossMove(boss: BossState, state: GameState, dist: number): number {
   const moves = bossMovesForType(boss.bossType);
   if (boss.bossType === "boss_tidewarden") {
