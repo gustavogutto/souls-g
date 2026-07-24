@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh } from "three";
-import { createGameState, type GameState } from "./GameState";
+import { createGameState, createProgressFlags, type GameState, type ProgressFlags } from "./GameState";
 import { useGameInput } from "./input";
-import { generateMap, generateHearthMap } from "./maps/MapGenerator";
+import { generateMap, generateHearthMap, FLOOR_SEQUENCE } from "./maps/MapGenerator";
 import { Floor, Area, AREA_CONFIGS } from "./utils/constants";
 import { DungeonRenderer } from "./DungeonRenderer";
 import { Player } from "./Player";
@@ -45,12 +45,19 @@ function BossGateDoor({ state }: { state: GameState }) {
   );
 }
 
+// Areas with a real 5-floor crawl (as opposed to the Hearth's static hub or
+// the prologue's single hand-tuned floor).
+function isMultiFloorArea(area: Area): boolean {
+  return area !== Area.HEARTH && area !== Area.PROLOGUE;
+}
+
 // Watches GameState.reachedEnd (set by Player.tsx once the player steps onto
 // the end_portal tile) and fires onReachEnd exactly once — mirrors the
 // pulse-consumption pattern Interactables.tsx uses for the "E" action, just
 // framed as a one-shot ref guard since reachedEnd itself isn't reset (the
 // whole GameState is discarded on area change anyway, via Floor1Gameplay's
-// key={area} remount). No-op on the Hearth's own map, which never sets it.
+// key={area}-{floor} remount). No-op on the Hearth's own map, which never
+// sets it.
 function EndPortalWatcher({ state, onReachEnd }: { state: GameState; onReachEnd: () => void }) {
   const fired = useRef(false);
   useFrame(() => {
@@ -66,15 +73,33 @@ function EndPortalWatcher({ state, onReachEnd }: { state: GameState; onReachEnd:
 // `key={area}` on the gameplay group below forces a full remount (fresh
 // MapData + fresh GameState) when the area changes — simpler and safer than
 // trying to hot-swap state inside a live Player/Enemy tree.
-function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { area: Area; initialSave: SaveData | null; onStateReady: (state: GameState) => void; onAreaChange: (a: Area) => void }) {
+function Floor1Gameplay({
+  area,
+  floor,
+  initialSave,
+  progress,
+  onStateReady,
+  onAreaChange,
+  onFloorAdvance,
+}: {
+  area: Area;
+  floor: Floor;
+  initialSave: SaveData | null;
+  progress: ProgressFlags;
+  onStateReady: (state: GameState) => void;
+  onAreaChange: (a: Area) => void;
+  onFloorAdvance: (f: Floor) => void;
+}) {
   const dungeonGroupRef = useRef<THREE.Group>(null!);
-  const mapData = useMemo(() => (area === Area.HEARTH ? generateHearthMap() : generateMap(Floor.BASEMENT, area)), [area]);
+  const mapData = useMemo(() => (area === Area.HEARTH ? generateHearthMap() : generateMap(floor, area)), [area, floor]);
   const theme = useMemo(() => getAreaTheme(area), [area]);
   const [state] = useState<GameState>(() => {
-    const s = createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier);
-    if (initialSave && initialSave.area === area) applySaveData(s, initialSave);
+    const s = createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier, progress, floor);
+    if (initialSave && initialSave.area === area && initialSave.floor === floor) applySaveData(s, initialSave);
     return s;
   });
+  const floorIdx = FLOOR_SEQUENCE.indexOf(floor);
+  const isFinalFloor = !isMultiFloorArea(area) || floorIdx === FLOOR_SEQUENCE.length - 1;
   const input = useGameInput();
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [activeNpc, setActiveNpc] = useState<"martyna" | "varn" | null>(null);
@@ -112,7 +137,13 @@ function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { are
         <Interactables state={state} input={input} />
         <HearthGates state={state} input={input} onTravel={onAreaChange} />
         <HearthNPCs state={state} input={input} onTalk={setActiveNpc} />
-        <EndPortalWatcher state={state} onReachEnd={() => onAreaChange(Area.HEARTH)} />
+        <EndPortalWatcher
+          state={state}
+          onReachEnd={() => {
+            if (isMultiFloorArea(area) && !isFinalFloor) onFloorAdvance(FLOOR_SEQUENCE[floorIdx + 1]);
+            else onAreaChange(Area.HEARTH);
+          }}
+        />
         <Projectiles state={state} />
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} look={input.look} />
       </Canvas>
@@ -133,25 +164,42 @@ function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { are
 
 export function GameScene() {
   const initialSave = useMemo(() => loadGame(), []);
-  const [area, setArea] = useState<Area>(initialSave?.area ?? Area.HEARTH);
+  // A brand new game (no save yet) begins in the prologue, not the Hearth —
+  // design doc section 2: "leaving [the prologue] for the first time ever
+  // drops the player into Area 1"; the Hearth itself is reached only via the
+  // prologue's own end (win or lose) or Area 1's completion.
+  const [area, setArea] = useState<Area>(initialSave?.area ?? Area.PROLOGUE);
+  const [floor, setFloor] = useState<Floor>(initialSave?.floor ?? Floor.BASEMENT);
   const liveStateRef = useRef<GameState | null>(null);
+  const progressRef = useRef<ProgressFlags>(initialSave?.progress ?? createProgressFlags());
 
   const handleAreaChange = (next: Area) => {
+    if (area === Area.PROLOGUE) progressRef.current.prologueComplete = true;
     if (liveStateRef.current) saveGame(liveStateRef.current);
     liveStateRef.current = null;
+    setFloor(Floor.BASEMENT); // a fresh area (or the debug picker) always starts at its own floor 1
     setArea(next);
+  };
+
+  const handleFloorAdvance = (next: Floor) => {
+    if (liveStateRef.current) saveGame(liveStateRef.current);
+    liveStateRef.current = null;
+    setFloor(next);
   };
 
   return (
     <div style={{ position: "relative", width: "100vw", height: "100vh", background: "#0a0a12" }}>
       <Floor1Gameplay
-        key={area}
+        key={`${area}-${floor}`}
         area={area}
+        floor={floor}
         initialSave={initialSave}
+        progress={progressRef.current}
         onStateReady={(state) => {
           liveStateRef.current = state;
         }}
         onAreaChange={handleAreaChange}
+        onFloorAdvance={handleFloorAdvance}
       />
       <AreaDebugPicker area={area} onChange={handleAreaChange} />
     </div>

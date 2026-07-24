@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile } from "./GameState";
+import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile, markBossDefeated } from "./GameState";
 import { computeWeaponDamage, computeSpellDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { CINDER_WRETCH_DETONATE_RADIUS, CINDER_WRETCH_DETONATE_DAMAGE_MULT } from "./utils/enemyRoles";
 import { STAMINA_REGEN_PER_SEC } from "./utils/constants";
@@ -247,6 +247,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
             if (boss.hp <= 0) {
               boss.aiState = "dead";
               state.gateLocked = false;
+              markBossDefeated(state);
               const souls = applySoulsGainModifier(SOULS_PER_BOSS, p.equipped, p.upgrades);
               p.stats.souls += souls;
               spawnFloatingText(state, `SLAIN — +${souls} souls`, boss.position.clone().add(new THREE.Vector3(0, 3, 0)), "#ff5555");

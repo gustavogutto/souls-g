@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { AREA_CONFIGS, BASE_STATS, getMaxStamina, getMaxFP, type Area, type PlayerStats } from "./utils/constants";
+import { AREA_CONFIGS, BASE_STATS, getMaxStamina, getMaxFP, Floor, type Area, type PlayerStats } from "./utils/constants";
 import { ROLE_CONFIG, roleForType, type EnemyRole } from "./utils/enemyRoles";
 import { getEffectiveMaxHP, type ItemUpgrades } from "./utils/equipment";
 import { getItemDef, RARITY_COLOR, type ItemSlot } from "./utils/items";
@@ -180,9 +180,34 @@ export interface FloatingText {
   color: string;
 }
 
+// Persists across the Floor1Gameplay remounts that happen on every area
+// change (unlike the rest of GameState, which is discarded and rebuilt from
+// scratch each time) — GameScene owns the long-lived object and passes the
+// same reference into createGameState each time, so mutations here (a boss
+// dying, the prologue ending) are visible immediately without a save/reload
+// round-trip. Drives Hearth NPC visibility staging (design doc section 2):
+// Martyna appears once the prologue is complete, Varn once Area 1's boss
+// is dead.
+export interface ProgressFlags {
+  prologueComplete: boolean;
+  areaBossDefeated: Partial<Record<Area, boolean>>;
+}
+
+export function createProgressFlags(): ProgressFlags {
+  return { prologueComplete: false, areaBossDefeated: {} };
+}
+
+// Called from both the melee (Player.tsx) and spell (Projectiles.tsx) boss
+// kill paths — kept as one function so the two sites can't drift.
+export function markBossDefeated(state: GameState) {
+  state.progress.areaBossDefeated[state.area] = true;
+}
+
 export interface GameState {
   mapData: MapData;
   area: Area;
+  floor: Floor;
+  progress: ProgressFlags;
   paused: boolean; // set true while a full-screen UI panel (inventory, etc) is open
   player: PlayerState;
   enemies: EnemyState[];
@@ -325,7 +350,7 @@ export function createEnemyState(id: string, role: EnemyRole, position: THREE.Ve
 // straight from MapData.enemySpawns (real per-area rosters from
 // AREA_CONFIGS, via MapGenerator) mapped to a role through enemyRoles.ts's
 // own roleForType() — no hardcoded demo enemy list anymore.
-export function createGameState(mapData: MapData, area: Area, areaDamageMultiplier: number): GameState {
+export function createGameState(mapData: MapData, area: Area, areaDamageMultiplier: number, progress: ProgressFlags = createProgressFlags(), floor: Floor = Floor.BASEMENT): GameState {
   const enemies = mapData.enemySpawns.map((spawn, i) => {
     const role = roleForType(spawn.type);
     return createEnemyState(`${spawn.type}-${i}`, role, new THREE.Vector3(spawn.x + 0.5, 0, spawn.y + 0.5), areaDamageMultiplier);
@@ -362,6 +387,8 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
   return {
     mapData,
     area,
+    floor,
+    progress,
     paused: false,
     player: createPlayerState(mapData.playerSpawn),
     enemies,

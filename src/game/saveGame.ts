@@ -1,31 +1,32 @@
 import type { PlayerStats } from "./utils/constants";
-import { Area } from "./utils/constants";
+import { Area, Floor } from "./utils/constants";
 import type { ItemSlot } from "./utils/items";
 import type { ItemUpgrades } from "./utils/equipment";
 import { getEffectiveMaxHP } from "./utils/equipment";
 import { getMaxStamina } from "./utils/constants";
-import type { GameState } from "./GameState";
+import type { GameState, ProgressFlags } from "./GameState";
 
 // Minimal single-slot save (phase 3 of the 3D conversion plan) — just the
-// player's own progression (stats/gear/hp/flasks) plus which area they were
-// in. NOT yet saved: exact position, floor-content state (opened chests,
-// dead enemies), since MapGenerator isn't seeded yet (generateMap() is
-// unseeded Math.random(), same as the source game before its own mapSeed
-// fix) — a reload always regenerates a fresh layout of the saved area's
-// first floor rather than resuming the exact same one. Full floor-state
-// persistence is phase 10's job, once there's more than one floor per area
-// to actually navigate between.
+// player's own progression (stats/gear/hp/flasks) plus which area/floor they
+// were on. NOT yet saved: exact position, floor-content state (opened
+// chests, dead enemies), since MapGenerator isn't seeded yet (generateMap()
+// is unseeded Math.random(), same as the source game before its own
+// mapSeed fix) — a reload always regenerates a fresh layout of the saved
+// area+floor rather than resuming the exact same one. Full floor-state
+// persistence is a separate, not-yet-built gap.
 const SAVE_KEY = "echoes_hohenberg_3d_save_v1";
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 3; // v3 adds `floor` (5-floors-per-area progression)
 
 export interface SaveData {
   schemaVersion: number;
   area: Area;
+  floor: Floor;
   stats: PlayerStats;
   equipped: Partial<Record<ItemSlot, string>>;
   upgrades: ItemUpgrades;
   hp: number;
   flaskCharges: number;
+  progress: ProgressFlags;
 }
 
 export function saveGame(state: GameState) {
@@ -33,11 +34,13 @@ export function saveGame(state: GameState) {
   const data: SaveData = {
     schemaVersion: SCHEMA_VERSION,
     area: state.area,
+    floor: state.floor,
     stats: p.stats,
     equipped: p.equipped,
     upgrades: p.upgrades,
     hp: p.hp,
     flaskCharges: p.flaskCharges,
+    progress: state.progress,
   };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -54,6 +57,9 @@ export function loadGame(): SaveData | null {
     const data = JSON.parse(raw) as SaveData;
     if (data.schemaVersion !== SCHEMA_VERSION) return null;
     if (!(data.area in Area)) return null;
+    // Floor is a string enum (no reverse mapping), unlike Area's numeric one
+    // just above — `in` can't validate it the same way.
+    if (!Object.values(Floor).includes(data.floor)) return null;
     return data;
   } catch {
     return null;

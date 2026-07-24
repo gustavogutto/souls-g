@@ -1,10 +1,17 @@
 import { useEffect, useRef } from "react";
 import type { GameState } from "./GameState";
 import type { LookState } from "./input";
+import { Area } from "./utils/constants";
+import { FLOOR_SEQUENCE } from "./maps/MapGenerator";
 
 // Runs its own rAF loop (outside the R3F canvas) reading directly from the
 // shared mutable GameState — no React re-renders on every HP/stamina tick.
 export function HUD({ state, look }: { state: GameState; look: React.MutableRefObject<LookState> }) {
+  // area/floor never change without a full remount (see GameScene.tsx's
+  // key={`${area}-${floor}`}), so this is safe to compute once rather than
+  // re-derive every rAF tick like the rest of this component's live stats.
+  const isMultiFloorArea = state.area !== Area.HEARTH && state.area !== Area.PROLOGUE;
+  const floorLabel = isMultiFloorArea ? `Floor ${FLOOR_SEQUENCE.indexOf(state.floor) + 1} / ${FLOOR_SEQUENCE.length}` : null;
   const hpBarRef = useRef<HTMLDivElement>(null);
   const hpTextRef = useRef<HTMLDivElement>(null);
   const stamBarRef = useRef<HTMLDivElement>(null);
@@ -89,7 +96,10 @@ export function HUD({ state, look }: { state: GameState; look: React.MutableRefO
         </div>
       </div>
 
-      <div ref={enemiesRef} style={{ position: "absolute", top: 20, right: 20, fontSize: 13, opacity: 0.85 }} />
+      <div style={{ position: "absolute", top: 20, right: 20, fontSize: 13, opacity: 0.85, textAlign: "right" }}>
+        {floorLabel && <div style={{ opacity: 0.7, marginBottom: 2 }}>{floorLabel}</div>}
+        <div ref={enemiesRef} />
+      </div>
 
       <div
         ref={bossPanelRef}

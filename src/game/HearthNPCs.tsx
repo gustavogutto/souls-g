@@ -1,8 +1,18 @@
 import { useFrame } from "@react-three/fiber";
 import type { GameState } from "./GameState";
+import { Area } from "./utils/constants";
 import type { GameInput } from "./input";
 
 const INTERACT_RANGE = 1.6;
+
+// Design doc section 2's staging rule: Martyna is present the moment the
+// prologue ends, Varn unlocks after Area 1's boss dies. (The stash and the
+// Tide-Refused wanderer are a separate, not-yet-built gap — see the design
+// doc checklist.)
+function isNpcVisible(id: "martyna" | "varn", progress: GameState["progress"]): boolean {
+  if (id === "martyna") return progress.prologueComplete;
+  return !!progress.areaBossDefeated[Area.AREA_1];
+}
 const NPC_COLOR: Record<"martyna" | "varn", string> = {
   martyna: "#c9a84c", // ember-gold — Keeper of the Hearth
   varn: "#8899aa", // iron-grey — the blacksmith
@@ -23,7 +33,7 @@ function NPCFigure({ npc }: { npc: { id: "martyna" | "varn"; x: number; y: numbe
 // Martyna and Varn — proximity + "E"/USE interact opens the matching DOM
 // panel (HearthNPCPanels.tsx), same pattern as chests/levers/gates.
 export function HearthNPCs({ state, input, onTalk }: { state: GameState; input: GameInput; onTalk: (npc: "martyna" | "varn") => void }) {
-  const npcs = state.mapData.npcs;
+  const npcs = state.mapData.npcs?.filter((n) => isNpcVisible(n.id, state.progress));
 
   useFrame(() => {
     if (!npcs || state.paused) return;

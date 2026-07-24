@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh } from "three";
-import { type GameState, spawnFloatingText, killPlayer, handleSpecialEnemyDeath } from "./GameState";
+import { type GameState, spawnFloatingText, killPlayer, handleSpecialEnemyDeath, markBossDefeated } from "./GameState";
 import { applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { isWallTile } from "./maps/collision";
 import { PROJECTILE_POOL_SIZE, SOULS_PER_KILL, SOULS_PER_BOSS } from "./gameConstants";
@@ -99,6 +99,7 @@ export function Projectiles({ state }: { state: GameState }) {
             if (boss.hp <= 0) {
               boss.aiState = "dead";
               state.gateLocked = false;
+              markBossDefeated(state);
               const souls = applySoulsGainModifier(SOULS_PER_BOSS, p.equipped, p.upgrades);
               p.stats.souls += souls;
               spawnFloatingText(state, `SLAIN — +${souls} souls`, boss.position.clone().add(new THREE.Vector3(0, 3, 0)), "#ff5555");

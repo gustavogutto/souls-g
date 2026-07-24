@@ -79,7 +79,7 @@ export const FLOOR_ARCHETYPES: FloorArchetype[] = [
   { name: "Gauntlet", mainRoomCountRange: [3, 4], mainRoomSizeRange: [5, 6], deadEndCount: 2, corridorWidth: 3, pathJitter: 2, loopChance: 0 },
 ];
 
-const FLOOR_SEQUENCE: Floor[] = [Floor.BASEMENT, Floor.GROUND, Floor.SECOND, Floor.THIRD, Floor.TOP];
+export const FLOOR_SEQUENCE: Floor[] = [Floor.BASEMENT, Floor.GROUND, Floor.SECOND, Floor.THIRD, Floor.TOP];
 
 export function archetypeForFloor(floor: Floor): FloorArchetype {
   const idx = FLOOR_SEQUENCE.indexOf(floor);
@@ -151,7 +151,8 @@ function generateLabyrinth(
   width: number,
   height: number,
   archetype: FloorArchetype,
-  area: Area
+  area: Area,
+  hasBoss: boolean
 ): { map: number[][]; rooms: Room[]; floodTiles: Map<string, 1 | 2>; sortedMain: Room[] } {
   const map: number[][] = [];
   for (let y = 0; y < height; y++) {
@@ -221,20 +222,30 @@ function generateLabyrinth(
   carveRoom(endRoom.x, endRoom.y, endRoom.w, endRoom.h);
   rooms.push(endRoom);
 
-  const isDragonArena = area === Area.AREA_5;
-  const bossW = isDragonArena ? 18 : 10;
-  const bossH = isDragonArena ? 16 : 9;
-  const bossX = width - bossW - 12;
-  const bossY = 3;
-  const bossRoom: Room = { x: bossX, y: bossY, w: bossW, h: bossH, tag: "boss", center: { x: bossX + Math.floor(bossW / 2), y: bossY + Math.floor(bossH / 2) } };
-  carveRoom(bossRoom.x, bossRoom.y, bossRoom.w, bossRoom.h);
-  rooms.push(bossRoom);
+  // Only the area's final floor gets a boss room — every other floor is a
+  // plain crawl whose "end" room leads to the next floor instead. Rooms
+  // still interpolate their placement toward whichever room ends the
+  // critical path (the boss room when there is one, otherwise the end room
+  // itself), so non-boss floors aren't just the boss-floor layout with a
+  // hole in it.
+  let bossRoom: Room | undefined;
+  if (hasBoss) {
+    const isDragonArena = area === Area.AREA_5;
+    const bossW = isDragonArena ? 18 : 10;
+    const bossH = isDragonArena ? 16 : 9;
+    const bossX = width - bossW - 12;
+    const bossY = 3;
+    bossRoom = { x: bossX, y: bossY, w: bossW, h: bossH, tag: "boss", center: { x: bossX + Math.floor(bossW / 2), y: bossY + Math.floor(bossH / 2) } };
+    carveRoom(bossRoom.x, bossRoom.y, bossRoom.w, bossRoom.h);
+    rooms.push(bossRoom);
+  }
+  const pathEndAnchor = (bossRoom ?? endRoom).center;
 
   const targetMainRooms = randInt(archetype.mainRoomCountRange[0], archetype.mainRoomCountRange[1]);
   for (let i = 0; i < targetMainRooms; i++) {
     const t = (i + 1) / (targetMainRooms + 1);
-    const targetX = startRoom.center.x + (bossRoom.center.x - startRoom.center.x) * t;
-    const targetY = startRoom.center.y + (bossRoom.center.y - startRoom.center.y) * t;
+    const targetX = startRoom.center.x + (pathEndAnchor.x - startRoom.center.x) * t;
+    const targetY = startRoom.center.y + (pathEndAnchor.y - startRoom.center.y) * t;
     for (let attempt = 0; attempt < 40; attempt++) {
       const rw = randInt(archetype.mainRoomSizeRange[0], archetype.mainRoomSizeRange[1]);
       const rh = randInt(archetype.mainRoomSizeRange[0], archetype.mainRoomSizeRange[1]);
@@ -261,7 +272,7 @@ function generateLabyrinth(
     }
   }
 
-  const mainPath = rooms.filter((r) => r.tag === "start" || r.tag === "normal" || r.tag === "boss");
+  const mainPath = rooms.filter((r) => r.tag === "start" || r.tag === "normal" || r.tag === "boss" || (!hasBoss && r.tag === "end"));
   const sortedMain = [rooms[0]];
   const remaining = mainPath.filter((r) => r.tag !== "start");
   while (remaining.length > 0) {
@@ -282,7 +293,11 @@ function generateLabyrinth(
   for (let i = 1; i < sortedMain.length; i++) {
     carveCorridor(sortedMain[i - 1].center.x, sortedMain[i - 1].center.y, sortedMain[i].center.x, sortedMain[i].center.y);
   }
-  carveCorridor(bossRoom.center.x, bossRoom.center.y, endRoom.center.x, endRoom.center.y);
+  // When there's a boss, the end room sits beyond it (reached only once the
+  // boss gate unlocks) — not part of sortedMain's own chain. When there's
+  // no boss, the end room is already the last stop in sortedMain (see the
+  // mainPath filter above), so it's already connected.
+  if (bossRoom) carveCorridor(bossRoom.center.x, bossRoom.center.y, endRoom.center.x, endRoom.center.y);
 
   const deadEnds = rooms.filter((r) => r.tag === "dead_end");
   for (const de of deadEnds) {
@@ -302,6 +317,10 @@ function generateLabyrinth(
 }
 
 function pickRoomAtPathFraction(sortedMain: Room[], fraction: number): Room {
+  // Never land exactly on the room that ends the critical path (the boss
+  // room when one exists, otherwise the end room that now terminates
+  // sortedMain on boss-less floors — see generateLabyrinth's hasBoss param).
+  const isTerminal = (r: Room) => r.tag === "boss" || r.tag === "end";
   const segLengths: number[] = [];
   let total = 0;
   for (let i = 1; i < sortedMain.length; i++) {
@@ -316,11 +335,11 @@ function pickRoomAtPathFraction(sortedMain: Room[], fraction: number): Room {
     cumulative += segLengths[i];
     if (cumulative >= target) {
       const candidate = sortedMain[i + 1];
-      return candidate.tag === "boss" && i > 0 ? sortedMain[i] : candidate;
+      return isTerminal(candidate) && i > 0 ? sortedMain[i] : candidate;
     }
   }
   const last = sortedMain[sortedMain.length - 1];
-  return last.tag === "boss" && sortedMain.length > 1 ? sortedMain[sortedMain.length - 2] : last;
+  return isTerminal(last) && sortedMain.length > 1 ? sortedMain[sortedMain.length - 2] : last;
 }
 
 function findFreeTileNear(
@@ -346,8 +365,13 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   const archetype = archetypeForFloor(floor);
   const enemyTypes = areaConfig.enemyTypes;
   const bossType = areaConfig.bossType;
+  const floorIdx = FLOOR_SEQUENCE.indexOf(floor);
+  // The prologue is a single self-contained floor (its own boss, the
+  // Tidewarden, regardless of which Floor enum value it's generated with) —
+  // every other area is the real "5 floors, boss only on the last" shape.
+  const isFinalFloor = area === Area.PROLOGUE || floorIdx === FLOOR_SEQUENCE.length - 1;
 
-  const { map: rawMap, rooms, floodTiles, sortedMain } = generateLabyrinth(width, height, archetype, area);
+  const { map: rawMap, rooms, floodTiles, sortedMain } = generateLabyrinth(width, height, archetype, area, isFinalFloor);
   const tideArea = area === Area.AREA_2;
   const tiles: TileData[] = [];
   const floorTiles: { x: number; y: number }[] = [];
@@ -383,7 +407,6 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   const normalRooms = rooms.filter((r) => r.tag === "normal" || r.tag === "dead_end");
   const mainRoomsOnly = rooms.filter((r) => r.tag === "normal");
 
-  const floorIdx = FLOOR_SEQUENCE.indexOf(floor);
   const archerType = ARCHER_TYPE_BY_AREA[area];
   const archerCap = ARCHER_MAX_PER_ROOM[area] ?? 0;
   const archersEligibleThisFloor = !!archerType && archerCap > 0 && floorIdx >= ARCHER_MIN_FLOOR_INDEX;
@@ -547,10 +570,11 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   if (!ashenFlameSpawn) ashenFlameSpawn = findFreeTileNear(startRoom.center, [[0, 0]] as const, isFreeTile, markTileUsed);
 
   // Secret lever fight (see utils/secretFights.ts) — one per area that has
-  // one configured, tucked into a normal room along the main path rather
-  // than a bespoke arena (same precedent as the boss/dragon rooms).
+  // one configured, not one per floor, so it's pinned to a single floor
+  // index (the "Galleries" middle floor) rather than generated on every
+  // floor generateMap() is ever called for.
   let leverSpawn: { x: number; y: number } | undefined;
-  if (SECRET_FIGHT_BY_AREA[area]) {
+  if (SECRET_FIGHT_BY_AREA[area] && floorIdx === 2) {
     const leverRoom = pickRoomAtPathFraction(sortedMain, 0.65 + Math.random() * 0.15);
     const leverOffsets = [[1, 1], [-1, -1], [1, -1], [-1, 1], [2, 0], [-2, 0], [0, 2], [0, -2], [0, 0]] as const;
     leverSpawn = findFreeTileNear(leverRoom.center, leverOffsets, isFreeTile, markTileUsed);
