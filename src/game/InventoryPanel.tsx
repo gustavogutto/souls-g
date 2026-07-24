@@ -20,6 +20,7 @@ export function InventoryPanel({ state, open, setOpen }: { state: GameState; ope
 
   useEffect(() => {
     state.paused = open;
+    if (open && document.pointerLockElement) document.exitPointerLock();
   }, [open, state]);
 
   useEffect(() => {

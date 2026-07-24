@@ -1,12 +1,14 @@
 import { useEffect, useRef } from "react";
 import type { GameState } from "./GameState";
+import type { LookState } from "./input";
 
 // Runs its own rAF loop (outside the R3F canvas) reading directly from the
 // shared mutable GameState — no React re-renders on every HP/stamina tick.
-export function HUD({ state }: { state: GameState }) {
+export function HUD({ state, look }: { state: GameState; look: React.MutableRefObject<LookState> }) {
   const hpBarRef = useRef<HTMLDivElement>(null);
   const hpTextRef = useRef<HTMLDivElement>(null);
   const stamBarRef = useRef<HTMLDivElement>(null);
+  const fpBarRef = useRef<HTMLDivElement>(null);
   const enemiesRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const deathRef = useRef<HTMLDivElement>(null);
@@ -14,6 +16,8 @@ export function HUD({ state }: { state: GameState }) {
   const bossNameRef = useRef<HTMLDivElement>(null);
   const bossBarRef = useRef<HTMLDivElement>(null);
   const shownTextIds = useRef<Set<number>>(new Set());
+  const lookHintRef = useRef<HTMLDivElement>(null);
+  const reticleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let raf: number;
@@ -22,6 +26,7 @@ export function HUD({ state }: { state: GameState }) {
       if (hpBarRef.current) hpBarRef.current.style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
       if (hpTextRef.current) hpTextRef.current.textContent = `${Math.max(0, Math.ceil(p.hp))} / ${p.maxHp}`;
       if (stamBarRef.current) stamBarRef.current.style.width = `${Math.max(0, (p.stamina / p.maxStamina) * 100)}%`;
+      if (fpBarRef.current) fpBarRef.current.style.width = `${Math.max(0, (p.fp / p.maxFp) * 100)}%`;
 
       const alive = state.enemies.filter((e) => e.aiState !== "dead").length;
       if (enemiesRef.current) enemiesRef.current.textContent = `Enemies remaining: ${alive} / ${state.enemies.length}`;
@@ -56,11 +61,17 @@ export function HUD({ state }: { state: GameState }) {
         }
       }
 
+      if (lookHintRef.current) lookHintRef.current.style.display = look.current.locked ? "none" : "block";
+      if (reticleRef.current) {
+        reticleRef.current.style.display = look.current.locked ? "block" : "none";
+        reticleRef.current.style.background = p.casting ? "#8ec4ff" : "rgba(232,224,212,0.7)";
+      }
+
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [state]);
+  }, [state, look]);
 
   return (
     <div style={{ position: "absolute", inset: 0, pointerEvents: "none", fontFamily: "Georgia, serif", color: "#e8e0d4" }}>
@@ -72,6 +83,9 @@ export function HUD({ state }: { state: GameState }) {
         <div ref={hpTextRef} style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }} />
         <div style={{ height: 8, background: "#0a1a12", border: "1px solid #1a4a2e", marginTop: 6 }}>
           <div ref={stamBarRef} style={{ height: "100%", background: "#2e8b57", width: "100%" }} />
+        </div>
+        <div style={{ height: 8, background: "#0a0f1a", border: "1px solid #1a3a5a", marginTop: 4 }}>
+          <div ref={fpBarRef} style={{ height: "100%", background: "#3a7bd5", width: "100%" }} />
         </div>
       </div>
 
@@ -90,10 +104,27 @@ export function HUD({ state }: { state: GameState }) {
       <div ref={logRef} style={{ position: "absolute", top: 20, left: 20, fontSize: 16, fontWeight: "bold", textShadow: "1px 1px 2px black" }} />
 
       <div style={{ position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", fontSize: 11, opacity: 0.55, textAlign: "center", lineHeight: 1.6 }}>
-        WASD move · I light / J heavy / L bash · Space roll · F heal · E interact · C inventory · Shift sprint
-        <br />
-        (or the on-screen joystick + ROLL / ATK (hold for heavy) / SHLD / HEAL / USE / INV buttons)
+        WASD move · I light / J heavy / L bash · Q cast · Space roll · F heal · E interact · C inventory · Shift sprint
       </div>
+
+      <div
+        ref={lookHintRef}
+        style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          fontSize: 13, opacity: 0.65, textAlign: "center", background: "rgba(5,5,10,0.5)", padding: "8px 16px", borderRadius: 4,
+        }}
+      >
+        Click to enable mouse look
+      </div>
+
+      <div
+        ref={reticleRef}
+        style={{
+          display: "none",
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          width: 5, height: 5, borderRadius: "50%", background: "rgba(232,224,212,0.7)",
+        }}
+      />
 
       <div
         ref={deathRef}

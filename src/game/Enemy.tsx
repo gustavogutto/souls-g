@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type EnemyState, type GameState, enemyDamageForRole, spawnFloatingText, spawnProjectile } from "./GameState";
+import { type EnemyState, type GameState, enemyDamageForRole, spawnFloatingText, spawnProjectile, killPlayer } from "./GameState";
 import {
   ROLE_CONFIG,
   ARCHER_RETREAT_TRIGGER_DIST,
@@ -96,7 +96,7 @@ function applyMeleeHitToPlayer(e: EnemyState, state: GameState, damageMultiplier
   p.hp = Math.max(0, p.hp - dmg);
   p.hitFlashMs = 200;
   spawnFloatingText(state, `${dmg}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ff5555");
-  if (p.hp <= 0) p.dead = true;
+  if (p.hp <= 0) killPlayer(state);
 }
 
 // ---- Chase (default melee roles) ----
@@ -182,6 +182,7 @@ function fireRangedShot(e: EnemyState, state: GameState) {
   const dmg = Math.round(enemyDamageForRole(e));
   spawnProjectile(
     state,
+    "enemy",
     e.position.clone().setY(0.9),
     new THREE.Vector3(dx / len, 0, dz / len),
     ARCHER_PROJECTILE_SPEED,
@@ -273,7 +274,7 @@ function fireToadShot(e: EnemyState, state: GameState) {
   const dz = e.windupTargetZ - e.position.z;
   const len = Math.hypot(dx, dz) || 1;
   const dmg = Math.round(enemyDamageForRole(e));
-  spawnProjectile(state, e.position.clone().setY(0.5), new THREE.Vector3(dx / len, 0, dz / len), 5, dmg, len, "#66ff44", TOAD_LOB_ARC_HEIGHT);
+  spawnProjectile(state, "enemy", e.position.clone().setY(0.5), new THREE.Vector3(dx / len, 0, dz / len), 5, dmg, len, "#66ff44", TOAD_LOB_ARC_HEIGHT);
 }
 
 // Idle -> chase -> windup -> strike -> recover, driven by ROLE_CONFIG timings.

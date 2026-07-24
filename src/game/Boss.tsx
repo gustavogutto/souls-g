@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type BossState, type GameState, spawnFloatingText, spawnGroundHazard, spawnProjectile } from "./GameState";
+import { type BossState, type GameState, spawnFloatingText, spawnGroundHazard, spawnProjectile, killPlayer } from "./GameState";
 import { applyDamageReduction } from "./utils/equipment";
 import { isWallTile, resolveCollision } from "./maps/collision";
 import { bossMovesForType, bossVisualForType, BOSS_COMBAT, TIDEWARDEN_GRAB_TRIGGER_RANGE, TIDEWARDEN_HEAL_PUNISH_WINDOW_MS, type BossMove } from "./utils/bossData";
@@ -82,7 +82,7 @@ function applyBossHitToPlayer(boss: BossState, state: GameState, move: BossMove)
   p.hp = Math.max(0, p.hp - dmg);
   p.hitFlashMs = 200;
   spawnFloatingText(state, `${dmg}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), move.unblockable ? "#ff55ff" : "#ff5555");
-  if (p.hp <= 0) p.dead = true;
+  if (p.hp <= 0) killPlayer(state);
 }
 
 function fireBossProjectile(boss: BossState, state: GameState, move: BossMove) {
@@ -90,7 +90,7 @@ function fireBossProjectile(boss: BossState, state: GameState, move: BossMove) {
   const dz = boss.windupTargetZ - boss.position.z;
   const len = Math.hypot(dx, dz) || 1;
   const dmg = Math.round(boss.baseDamage * move.damageMultiplier);
-  spawnProjectile(state, boss.position.clone().setY(1.2), new THREE.Vector3(dx / len, 0, dz / len), 6, dmg, 14, hazardColorForBoss(boss.bossType));
+  spawnProjectile(state, "enemy", boss.position.clone().setY(1.2), new THREE.Vector3(dx / len, 0, dz / len), 6, dmg, 14, hazardColorForBoss(boss.bossType));
 }
 
 // Handles the strike itself once the windup(+hold) has elapsed. hasDealtDamageThisStrike

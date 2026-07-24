@@ -21,10 +21,6 @@ export const ROLL_DURATION_MS = 400;
 export const ROLL_STAMINA_COST = 28;
 export const ENEMY_BASE_DAMAGE = 70;
 
-// Hohenberg's ATK touch button: tap-vs-hold, heavy fires the instant the
-// hold threshold is reached (not on release).
-export const ATK_HEAVY_HOLD_MS = 200;
-
 // Flask charges (design doc Step 4) — simplified for this slice: fixed
 // starting charges, no refill mechanic yet (no rest points/area-clears here).
 export const FLASK_START_CHARGES = 3;
@@ -34,3 +30,18 @@ export const FLASK_HEAL_FRACTION = 0.4;
 // spell projectiles will share this same pool once phase 8 lands. Spawning
 // past this cap silently drops the shot (same precedent as the source).
 export const PROJECTILE_POOL_SIZE = 24;
+
+// Souls economy (design doc Step 6 / Hohenberg's GameScene.ts) — exact same
+// per-kill/per-boss values as the 2D source. Never awarded anywhere until
+// this pass: PlayerStats.souls existed since phase 1 but nothing incremented
+// it, so Martyna's leveling/Varn's shop had no currency to spend.
+export const SOULS_PER_KILL = 12;
+export const SOULS_PER_BOSS = 150;
+
+// FP (mana) regen — no Hohenberg-source precedent for an exact number
+// (its GameScene.ts never actually ticked FP outside combat), matched to
+// stamina's own regen feel instead. Design doc section 4: casting slows
+// movement to 40%, cancels are only refunded in the cast's first 40%.
+export const FP_REGEN_PER_SEC = 4;
+export const CAST_MOVE_SPEED_MULT = 0.4;
+export const CAST_REFUND_WINDOW_PCT = 0.4;

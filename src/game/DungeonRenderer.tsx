@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { MapData, TileData } from "./maps/MapGenerator";
+import type { AreaTheme } from "./utils/areaThemes";
 
 // Renders a whole floor as (at most) 3 draw calls: one merged floor mesh, one
 // merged wall mesh (vertex-colored per tile type instead of separate
@@ -13,15 +14,16 @@ import type { MapData, TileData } from "./maps/MapGenerator";
 
 const WALL_HEIGHT = 3;
 
-const TILE_COLORS: Record<TileData["type"], THREE.Color> = {
-  floor: new THREE.Color("#2a2a38"),
-  start: new THREE.Color("#3a4a3a"),
-  ice: new THREE.Color("#3a5a6a"),
-  stairs_down: new THREE.Color("#4a3a2a"),
-  end_portal: new THREE.Color("#5a3a6a"),
-  wall: new THREE.Color("#4a4a5c"),
-};
-const WALL_COLOR = TILE_COLORS.wall;
+function tileColors(theme: AreaTheme): Record<TileData["type"], THREE.Color> {
+  return {
+    floor: new THREE.Color(theme.floor),
+    start: new THREE.Color(theme.start),
+    ice: new THREE.Color(theme.special),
+    stairs_down: new THREE.Color(theme.stairs),
+    end_portal: new THREE.Color(theme.endPortal),
+    wall: new THREE.Color(theme.wall),
+  };
+}
 
 function getTile(mapData: MapData, x: number, y: number): TileData | undefined {
   if (x < 0 || y < 0 || x >= mapData.width || y >= mapData.height) return undefined;
@@ -39,7 +41,9 @@ function applyVertexColor(geometry: THREE.BufferGeometry, color: THREE.Color) {
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 }
 
-function buildDungeonGeometry(mapData: MapData) {
+function buildDungeonGeometry(mapData: MapData, theme: AreaTheme) {
+  const colors = tileColors(theme);
+  const wallColor = colors.wall;
   const floorGeoms: THREE.BufferGeometry[] = [];
   const wallGeoms: THREE.BufferGeometry[] = [];
   const neighborOffsets: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -57,13 +61,13 @@ function buildDungeonGeometry(mapData: MapData) {
       if (!adjacentFloor) continue;
       const geo = new THREE.BoxGeometry(1, WALL_HEIGHT, 1);
       geo.translate(tile.x + 0.5, WALL_HEIGHT / 2, tile.y + 0.5);
-      applyVertexColor(geo, WALL_COLOR);
+      applyVertexColor(geo, wallColor);
       wallGeoms.push(geo);
     } else {
       const geo = new THREE.PlaneGeometry(1, 1);
       geo.rotateX(-Math.PI / 2);
       geo.translate(tile.x + 0.5, 0, tile.y + 0.5);
-      applyVertexColor(geo, TILE_COLORS[tile.type] ?? TILE_COLORS.floor);
+      applyVertexColor(geo, colors[tile.type] ?? colors.floor);
       floorGeoms.push(geo);
     }
   }
@@ -75,8 +79,8 @@ function buildDungeonGeometry(mapData: MapData) {
   return { floorGeometry, wallGeometry };
 }
 
-export function DungeonRenderer({ mapData }: { mapData: MapData }) {
-  const { floorGeometry, wallGeometry } = useMemo(() => buildDungeonGeometry(mapData), [mapData]);
+export function DungeonRenderer({ mapData, theme }: { mapData: MapData; theme: AreaTheme }) {
+  const { floorGeometry, wallGeometry } = useMemo(() => buildDungeonGeometry(mapData, theme), [mapData, theme]);
 
   useEffect(() => {
     return () => {

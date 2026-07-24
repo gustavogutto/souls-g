@@ -13,13 +13,15 @@ import { Boss } from "./Boss";
 import { Hazards } from "./Hazards";
 import { Interactables } from "./Interactables";
 import { HearthGates, HEARTH_GATE_LABELS } from "./HearthGates";
+import { HearthNPCs } from "./HearthNPCs";
+import { MartynaPanel, VarnPanel } from "./HearthNPCPanels";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
-import { TouchControls } from "./TouchControls";
 import { AreaDebugPicker } from "./AreaDebugPicker";
 import { InventoryPanel } from "./InventoryPanel";
 import { loadGame, saveGame, applySaveData, type SaveData } from "./saveGame";
+import { getAreaTheme } from "./utils/areaThemes";
 
 const AUTOSAVE_INTERVAL_MS = 5000;
 
@@ -67,6 +69,7 @@ function EndPortalWatcher({ state, onReachEnd }: { state: GameState; onReachEnd:
 function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { area: Area; initialSave: SaveData | null; onStateReady: (state: GameState) => void; onAreaChange: (a: Area) => void }) {
   const dungeonGroupRef = useRef<THREE.Group>(null!);
   const mapData = useMemo(() => (area === Area.HEARTH ? generateHearthMap() : generateMap(Floor.BASEMENT, area)), [area]);
+  const theme = useMemo(() => getAreaTheme(area), [area]);
   const [state] = useState<GameState>(() => {
     const s = createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier);
     if (initialSave && initialSave.area === area) applySaveData(s, initialSave);
@@ -74,6 +77,7 @@ function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { are
   });
   const input = useGameInput();
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [activeNpc, setActiveNpc] = useState<"martyna" | "varn" | null>(null);
   const gateLabels = area === Area.HEARTH ? HEARTH_GATE_LABELS(state) : [];
 
   useEffect(() => {
@@ -89,14 +93,14 @@ function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { are
   return (
     <>
       <Canvas shadows camera={{ fov: 45, near: 0.1, far: 200 }}>
-        <color attach="background" args={["#0a0a12"]} />
-        <fog attach="fog" args={["#0a0a12", 15, 45]} />
-        <ambientLight intensity={0.45} />
-        <directionalLight position={[8, 14, 6]} intensity={1.2} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-        <pointLight position={[0, 6, 0]} intensity={0.4} color="#ffcc88" />
+        <color attach="background" args={[theme.background]} />
+        <fog attach="fog" args={[theme.fogColor, theme.fogNear, theme.fogFar]} />
+        <ambientLight intensity={theme.ambientIntensity} color={theme.ambientColor} />
+        <directionalLight position={[8, 14, 6]} intensity={theme.sunIntensity} color={theme.sunColor} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+        <pointLight position={[0, 6, 0]} intensity={0.4} color={theme.special} />
 
         <group ref={dungeonGroupRef}>
-          <DungeonRenderer mapData={mapData} />
+          <DungeonRenderer mapData={mapData} theme={theme} />
         </group>
         <Player state={state} input={input} />
         {state.enemies.map((e) => (
@@ -107,11 +111,12 @@ function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { are
         <Hazards state={state} />
         <Interactables state={state} input={input} />
         <HearthGates state={state} input={input} onTravel={onAreaChange} />
+        <HearthNPCs state={state} input={input} onTalk={setActiveNpc} />
         <EndPortalWatcher state={state} onReachEnd={() => onAreaChange(Area.HEARTH)} />
         <Projectiles state={state} />
-        <CameraRig state={state} dungeonGroup={dungeonGroupRef} />
+        <CameraRig state={state} dungeonGroup={dungeonGroupRef} look={input.look} />
       </Canvas>
-      <HUD state={state} />
+      <HUD state={state} look={input.look} />
       {gateLabels.length > 0 && (
         <div style={{ position: "absolute", top: 90, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 18, fontFamily: "Georgia, serif", fontSize: 11, color: "#e8e0d4", opacity: 0.75, textShadow: "1px 1px 2px black", pointerEvents: "none" }}>
           {gateLabels.map((g) => (
@@ -119,8 +124,9 @@ function Floor1Gameplay({ area, initialSave, onStateReady, onAreaChange }: { are
           ))}
         </div>
       )}
-      <TouchControls input={input} state={state} onToggleInventory={() => setInventoryOpen((o) => !o)} />
       <InventoryPanel state={state} open={inventoryOpen} setOpen={setInventoryOpen} />
+      <MartynaPanel state={state} open={activeNpc === "martyna"} onClose={() => setActiveNpc(null)} />
+      <VarnPanel state={state} open={activeNpc === "varn"} onClose={() => setActiveNpc(null)} />
     </>
   );
 }

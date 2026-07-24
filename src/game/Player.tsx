@@ -1,11 +1,12 @@
 import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight } from "./GameState";
-import { computeWeaponDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction } from "./utils/equipment";
+import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile } from "./GameState";
+import { computeWeaponDamage, computeSpellDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { CINDER_WRETCH_DETONATE_RADIUS, CINDER_WRETCH_DETONATE_DAMAGE_MULT } from "./utils/enemyRoles";
 import { STAMINA_REGEN_PER_SEC } from "./utils/constants";
+import { getItemDef } from "./utils/items";
 import {
   PLAYER_SPEED,
   LIGHT_ATTACK,
@@ -15,6 +16,11 @@ import {
   ROLL_DURATION_MS,
   ROLL_STAMINA_COST,
   FLASK_HEAL_FRACTION,
+  SOULS_PER_KILL,
+  SOULS_PER_BOSS,
+  FP_REGEN_PER_SEC,
+  CAST_MOVE_SPEED_MULT,
+  CAST_REFUND_WINDOW_PCT,
   type MeleeAction,
 } from "./gameConstants";
 import { isGateBlocked, resolveCollision } from "./maps/collision";
@@ -26,35 +32,63 @@ const PLAYER_RADIUS = 0.35;
 export function Player({ state, input }: { state: GameState; input: GameInput }) {
   const groupRef = useRef<Group>(null!);
   const bodyRef = useRef<Mesh>(null!);
+  const { camera } = useThree();
+  const aimDirRef = useRef(new THREE.Vector3(0, 0, 1));
 
   useFrame((_, dt) => {
     const p = state.player;
     if (p.dead || state.paused) return;
     const dtMs = dt * 1000;
     const axes = input.axes.current;
-    const joy = input.joystick.current;
     const actions = input.actions.current;
 
     // Stamina regen (paused briefly by rolling/attacking, matching Hohenberg's feel)
     const regen = getEffectiveStaminaRegenPerSec(STAMINA_REGEN_PER_SEC, p.equipped, p.upgrades);
     if (!p.rolling) p.stamina = Math.min(p.maxStamina, p.stamina + regen * dt);
+    p.fp = Math.min(p.maxFp, p.fp + FP_REGEN_PER_SEC * dt);
+
+    // Aim reticle direction — the camera's forward vector flattened onto the
+    // ground plane. Design doc section 1: since this build's camera is a
+    // locked-mouse-look orbit (not a free cursor), aiming is the "reticle/
+    // soft-lock" alternative it explicitly allows, not a ground-plane cursor
+    // raycast (which needs a visible, unlocked cursor the orbit camera can't
+    // also use). Whatever this points at when a cast's windup completes is
+    // the fired direction — never the direction at the initial keypress.
+    camera.getWorldDirection(aimDirRef.current);
+    aimDirRef.current.y = 0;
+    if (aimDirRef.current.lengthSq() < 1e-6) aimDirRef.current.set(Math.sin(p.facing), 0, Math.cos(p.facing));
+    aimDirRef.current.normalize();
 
     // Cooldown timers
     if (p.attackCooldownMs > 0) p.attackCooldownMs = Math.max(0, p.attackCooldownMs - dtMs);
     if (p.attackActiveMs > 0) p.attackActiveMs = Math.max(0, p.attackActiveMs - dtMs);
     if (p.hitFlashMs > 0) p.hitFlashMs = Math.max(0, p.hitFlashMs - dtMs);
 
-    // Combined movement vector: digital keyboard axes + analog joystick
-    let moveX = (axes.right ? 1 : 0) - (axes.left ? 1 : 0) + joy.x;
-    let moveZ = (axes.back ? 1 : 0) - (axes.forward ? 1 : 0) + joy.z;
+    // Camera-relative movement basis: pressing W always moves the player
+    // away from the camera regardless of which way the camera currently
+    // orbits, per design doc section 1. yaw=0 reproduces the old fixed
+    // (0, 10, 9) camera's forward direction exactly, so this is a drop-in
+    // replacement for the previous world-axis-aligned WASD mapping.
+    const yaw = input.look.current.yaw;
+    const sinYaw = Math.sin(yaw);
+    const cosYaw = Math.cos(yaw);
+    const forward = { x: -sinYaw, z: -cosYaw };
+    const right = { x: cosYaw, z: -sinYaw };
+    const inputForward = (axes.forward ? 1 : 0) - (axes.back ? 1 : 0);
+    const inputRight = (axes.right ? 1 : 0) - (axes.left ? 1 : 0);
+
+    let moveX = right.x * inputRight + forward.x * inputForward;
+    let moveZ = right.z * inputRight + forward.z * inputForward;
     const moveLen = Math.hypot(moveX, moveZ);
     if (moveLen > 1) {
       moveX /= moveLen;
       moveZ /= moveLen;
     }
-    const sprinting = axes.sprint || joy.sprinting;
+    const sprinting = axes.sprint;
 
-    // Roll (dodge) — one-shot pulse from keyboard Space or the ROLL touch button
+    // Roll (dodge) — one-shot pulse from Space. Always cancels an in-progress
+    // cast (design doc section 4); FP is only refunded if canceled within
+    // the first CAST_REFUND_WINDOW_PCT of the cast's total time.
     if (actions.roll && !p.rolling && p.stamina >= ROLL_STAMINA_COST) {
       let dirX = moveX;
       let dirZ = moveZ;
@@ -67,8 +101,34 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
       p.rolling = true;
       p.rollElapsedMs = 0;
       p.stamina -= ROLL_STAMINA_COST;
+      if (p.casting) {
+        if (p.castElapsedMs < p.castTotalMs * CAST_REFUND_WINDOW_PCT) p.fp = Math.min(p.maxFp, p.fp + p.castFpCost);
+        p.casting = false;
+        p.castSpellId = null;
+      }
     }
     actions.roll = false;
+
+    // Cast (spell) — Q, one-shot pulse. FP is spent up front at windup
+    // start (see the roll block above for the cancel/refund rule). Only
+    // "projectile" spells are wired up yet (Ashmote/Hearthlance/Moonfrost
+    // Lance/Stonefall) — ground_aoe/ground_hazard/buff_rune/beam spells
+    // (Gravewake, Terra Sigil, Comet's End) can still be equipped via the
+    // inventory screen but won't fire, so casting them is blocked here
+    // rather than silently spending FP for nothing.
+    if (actions.cast && !p.casting && !p.rolling) {
+      const spellId = p.equipped.spell;
+      const def = spellId ? getItemDef(spellId) : null;
+      if (def?.spell && def.spell.castType === "projectile" && p.fp >= def.spell.fpCost) {
+        p.fp -= def.spell.fpCost;
+        p.casting = true;
+        p.castElapsedMs = 0;
+        p.castTotalMs = def.spell.castTimeMs;
+        p.castSpellId = spellId!;
+        p.castFpCost = def.spell.fpCost;
+      }
+    }
+    actions.cast = false;
 
     if (p.rolling) {
       p.rollElapsedMs += dtMs;
@@ -80,12 +140,14 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
       if (moveLen > 0.01) {
         let speed = getEffectiveMoveSpeed(PLAYER_SPEED, p.equipped, p.upgrades);
         if (sprinting) speed *= 1.4;
+        if (p.casting) speed *= CAST_MOVE_SPEED_MULT;
         p.position.x += moveX * speed * dt;
         p.position.z += moveZ * speed * dt;
-        p.facing = Math.atan2(moveX, moveZ);
+        if (!p.casting) p.facing = Math.atan2(moveX, moveZ);
       }
 
-      // Light/heavy/bash — I/J/L keys or ATK(tap/hold)/SHLD touch buttons
+      // Light/heavy/bash — I/J/L keys. Blocked while casting (design doc
+      // section 4: a spell windup blocks melee/heal).
       const tryStartMelee = (config: MeleeAction) => {
         if (p.attackCooldownMs > 0 || p.stamina < config.staminaCost) return;
         p.stamina -= config.staminaCost;
@@ -94,16 +156,37 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         p.attackHitApplied = false;
         p.activeMelee = config;
       };
-      if (actions.attackHeavy) tryStartMelee(HEAVY_ATTACK);
-      else if (actions.shieldBash) tryStartMelee(SHIELD_BASH);
-      else if (actions.attackLight) tryStartMelee(LIGHT_ATTACK);
+      if (!p.casting) {
+        if (actions.attackHeavy) tryStartMelee(HEAVY_ATTACK);
+        else if (actions.shieldBash) tryStartMelee(SHIELD_BASH);
+        else if (actions.attackLight) tryStartMelee(LIGHT_ATTACK);
+      }
+
+      // Cast windup — facing follows the aim reticle (camera forward) while
+      // channeling, then fires using whichever direction that is at the
+      // instant the windup completes, per the "locked at release, not at
+      // keypress" rule.
+      if (p.casting) {
+        p.facing = Math.atan2(aimDirRef.current.x, aimDirRef.current.z);
+        p.castElapsedMs += dtMs;
+        if (p.castElapsedMs >= p.castTotalMs && p.castSpellId) {
+          const def = getItemDef(p.castSpellId);
+          if (def.spell) {
+            const dmg = computeSpellDamage(p.stats, def.spell, p.upgrades, p.castSpellId);
+            const origin = p.position.clone().addScaledVector(aimDirRef.current, 0.5).setY(0.9);
+            spawnProjectile(state, "player", origin, aimDirRef.current.clone(), def.spell.speed ?? 8, dmg, def.spell.range, def.spell.color, undefined, def.spell.homingDegPerSec);
+          }
+          p.casting = false;
+          p.castSpellId = null;
+        }
+      }
     }
     actions.attackLight = false;
     actions.attackHeavy = false;
     actions.shieldBash = false;
 
-    // Heal — F key or HEAL touch button
-    if (actions.heal && p.flaskCharges > 0 && p.hp < p.maxHp) {
+    // Heal — F key. Blocked while casting.
+    if (!p.casting && actions.heal && p.flaskCharges > 0 && p.hp < p.maxHp) {
       p.flaskCharges -= 1;
       const healFrac = getEffectiveHealFraction(FLASK_HEAL_FRACTION, p.equipped, p.upgrades);
       p.hp = Math.min(p.maxHp, p.hp + p.maxHp * healFrac);
@@ -131,7 +214,9 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         spawnFloatingText(state, `${dmg}`, enemy.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ffcc55");
         if (enemy.hp <= 0 && !handleSpecialEnemyDeath(state, enemy)) {
           enemy.aiState = "dead";
-          spawnFloatingText(state, "SLAIN", enemy.position.clone().add(new THREE.Vector3(0, 2.4, 0)), "#ff5555");
+          const souls = applySoulsGainModifier(SOULS_PER_KILL, p.equipped, p.upgrades);
+          p.stats.souls += souls;
+          spawnFloatingText(state, `SLAIN — +${souls} souls`, enemy.position.clone().add(new THREE.Vector3(0, 2.4, 0)), "#ff5555");
           // Cinder Wretch — detonates on death regardless of kill method,
           // damaging the player if they're standing too close.
           if (enemy.role === "cinder_wretch") {
@@ -142,7 +227,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
               p.hp = Math.max(0, p.hp - blastDmg);
               p.hitFlashMs = 200;
               spawnFloatingText(state, `${blastDmg}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ff8800");
-              if (p.hp <= 0) p.dead = true;
+              if (p.hp <= 0) killPlayer(state);
             }
           }
         }
@@ -162,7 +247,9 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
             if (boss.hp <= 0) {
               boss.aiState = "dead";
               state.gateLocked = false;
-              spawnFloatingText(state, "SLAIN", boss.position.clone().add(new THREE.Vector3(0, 3, 0)), "#ff5555");
+              const souls = applySoulsGainModifier(SOULS_PER_BOSS, p.equipped, p.upgrades);
+              p.stats.souls += souls;
+              spawnFloatingText(state, `SLAIN — +${souls} souls`, boss.position.clone().add(new THREE.Vector3(0, 3, 0)), "#ff5555");
             }
           }
         }
@@ -189,7 +276,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         if (dmg > 0) {
           p.hp = Math.max(0, p.hp - dmg);
           p.hitFlashMs = 200;
-          if (p.hp <= 0) p.dead = true;
+          if (p.hp <= 0) killPlayer(state);
         }
       }
     }

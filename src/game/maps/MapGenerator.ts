@@ -48,6 +48,8 @@ export interface MapData {
   // rendered/interacted by HearthGates.tsx. Undefined on every normal
   // procedurally-generated floor.
   areaGates?: { x: number; y: number; area: Area; label: string }[];
+  // Hearth-only: Martyna (leveling) and Varn (shop) — see HearthNPCs.tsx.
+  npcs?: { id: "martyna" | "varn"; x: number; y: number }[];
 }
 
 interface Room {
@@ -644,10 +646,17 @@ export function generateHearthMap(): MapData {
   }
   const playerSpawn = { x: Math.floor(size / 2), y: size - 4 };
   const areaGates = HEARTH_GATES.map((g) => ({ x: g.x, y: 3, area: g.area, label: g.label }));
+  // Flanking the spawn, between it and the gates — the first thing a new
+  // arrival sees, matching the design doc's "Martyna greets the player,
+  // Varn is at the anvil" first-visit framing.
+  const npcs: { id: "martyna" | "varn"; x: number; y: number }[] = [
+    { id: "martyna", x: Math.floor(size / 2) - 4, y: size - 8 },
+    { id: "varn", x: Math.floor(size / 2) + 4, y: size - 8 },
+  ];
 
   return {
     tiles, width: size, height: size, playerSpawn, startPoint: { ...playerSpawn },
     enemySpawns: [], chestSpawns: [], doorSpawns: [], propSpawns: [],
-    areaGates,
+    areaGates, npcs,
   };
 }

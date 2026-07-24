@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { AREA_CONFIGS, BASE_STATS, getMaxStamina, type Area, type PlayerStats } from "./utils/constants";
+import { AREA_CONFIGS, BASE_STATS, getMaxStamina, getMaxFP, type Area, type PlayerStats } from "./utils/constants";
 import { ROLE_CONFIG, roleForType, type EnemyRole } from "./utils/enemyRoles";
 import { getEffectiveMaxHP, type ItemUpgrades } from "./utils/equipment";
 import { getItemDef, RARITY_COLOR, type ItemSlot } from "./utils/items";
@@ -18,6 +18,13 @@ export interface PlayerState {
   maxHp: number;
   stamina: number;
   maxStamina: number;
+  fp: number;
+  maxFp: number;
+  casting: boolean;
+  castElapsedMs: number;
+  castTotalMs: number;
+  castSpellId: string | null; // p.equipped.spell, snapshotted at cast start so switching gear mid-cast can't change it
+  castFpCost: number; // spent at cast start, refunded if canceled within the first CAST_REFUND_WINDOW_PCT of castTotalMs
   rolling: boolean;
   rollElapsedMs: number;
   rollDir: THREE.Vector3;
@@ -153,6 +160,7 @@ export interface GroundHazard {
 
 export interface ProjectileState {
   id: number;
+  owner: "player" | "enemy"; // which side it damages on hit
   position: THREE.Vector3;
   dir: THREE.Vector3; // normalized, XZ plane
   speed: number; // units/sec
@@ -160,6 +168,7 @@ export interface ProjectileState {
   traveled: number;
   maxRange: number;
   arcHeight?: number; // toad lob visual only — the x/z motion is a flat lerp either way
+  homingDegPerSec?: number; // player spells only (Ashmote) — weak cone-limited steering toward the nearest enemy
   color: string;
 }
 
@@ -200,10 +209,14 @@ export interface GameState {
 
 export function createPlayerState(spawn: { x: number; y: number }): PlayerState {
   const stats: PlayerStats = { ...BASE_STATS };
-  const equipped: Partial<Record<ItemSlot, string>> = { weapon: "iron_sword", shield: "knight_shield" };
+  // Ashmote is start-owned and guaranteed (design doc section 5 / items.ts's
+  // nonSellable flag) — every new game begins with it equipped in the spell
+  // slot so casting is never locked out before a real spell shop exists.
+  const equipped: Partial<Record<ItemSlot, string>> = { weapon: "iron_sword", shield: "knight_shield", spell: "ashmote" };
   const upgrades: ItemUpgrades = {};
   const maxHp = getEffectiveMaxHP(stats.vigor, equipped, upgrades);
   const maxStamina = getMaxStamina(stats.endurance);
+  const maxFp = getMaxFP(stats.mind);
   return {
     stats,
     equipped,
@@ -217,6 +230,13 @@ export function createPlayerState(spawn: { x: number; y: number }): PlayerState 
     maxHp,
     stamina: maxStamina,
     maxStamina,
+    fp: maxFp,
+    maxFp,
+    casting: false,
+    castElapsedMs: 0,
+    castTotalMs: 0,
+    castSpellId: null,
+    castFpCost: 0,
     rolling: false,
     rollElapsedMs: 0,
     rollDir: new THREE.Vector3(0, 0, 1),
@@ -478,17 +498,20 @@ export function spawnGroundHazard(state: GameState, position: THREE.Vector3, rad
 // the shot rather than growing an unbounded array.
 export function spawnProjectile(
   state: GameState,
+  owner: "player" | "enemy",
   origin: THREE.Vector3,
   dir: THREE.Vector3,
   speed: number,
   damage: number,
   maxRange: number,
   color: string,
-  arcHeight?: number
+  arcHeight?: number,
+  homingDegPerSec?: number
 ) {
   if (state.projectiles.length >= PROJECTILE_POOL_SIZE) return;
   state.projectiles.push({
     id: state.nextProjectileId++,
+    owner,
     position: origin.clone(),
     dir: dir.clone(),
     speed,
@@ -496,8 +519,24 @@ export function spawnProjectile(
     traveled: 0,
     maxRange,
     arcHeight,
+    homingDegPerSec,
     color,
   });
+}
+
+// Design doc's death economy, simplified for this slice: souls are lost
+// immediately on death rather than left as a recoverable marker, because
+// generateMap() isn't seeded (see saveGame.ts's own comment on this) — every
+// re-entry into an area regenerates a fresh layout, so a marker tied to a
+// specific generated position would become unreachable the moment the player
+// left and came back. Revisit once floor layouts are cached/seeded.
+export function killPlayer(state: GameState) {
+  if (state.player.dead) return;
+  state.player.dead = true;
+  if (state.player.stats.souls > 0) {
+    spawnFloatingText(state, "Your souls are lost to the flood", state.player.position.clone().add(new THREE.Vector3(0, 2.5, 0)), "#b04434");
+    state.player.stats.souls = 0;
+  }
 }
 
 export function spawnFloatingText(state: GameState, text: string, position: THREE.Vector3, color: string) {

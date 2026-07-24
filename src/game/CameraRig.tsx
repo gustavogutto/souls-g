@@ -2,33 +2,35 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { GameState } from "./GameState";
+import type { LookState } from "./input";
 
-const DESIRED_OFFSET = new THREE.Vector3(0, 10, 9);
 const LOOK_OFFSET = new THREE.Vector3(0, 1, 0);
 const MIN_DISTANCE = 3;
+const DESIRED_DISTANCE = Math.hypot(10, 9); // same overall camera distance as the old fixed (0, 10, 9) offset
 
-// Third-person follow camera with a raycast-based pull-in: real procedural
+// Third-person orbit camera with a raycast-based pull-in: real procedural
 // corridors will clip a naive fixed-offset camera through walls constantly
 // (a problem the source game never had, being isometric 2D) — so instead of
 // lerping straight to the desired offset, we raycast from the look target
 // toward the desired camera position and pull the camera in front of the
-// first wall hit along that ray.
-export function CameraRig({ state, dungeonGroup }: { state: GameState; dungeonGroup: React.RefObject<THREE.Object3D | null> }) {
+// first wall hit along that ray. Orbit direction itself comes from `look`
+// (mouse yaw/pitch, see input.ts) rather than a fixed world-space vector.
+export function CameraRig({ state, dungeonGroup, look }: { state: GameState; dungeonGroup: React.RefObject<THREE.Object3D | null>; look: React.MutableRefObject<LookState> }) {
   const { camera } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
-  const currentDistance = useRef(DESIRED_OFFSET.length());
+  const currentDistance = useRef(DESIRED_DISTANCE);
 
   useFrame((_, dt) => {
     const target = state.player.position;
     const lookAt = new THREE.Vector3().copy(target).add(LOOK_OFFSET);
-    const desiredDir = DESIRED_OFFSET.clone().normalize();
-    const desiredDistance = DESIRED_OFFSET.length();
+    const { yaw, pitch } = look.current;
+    const desiredDir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
-    let allowedDistance = desiredDistance;
+    let allowedDistance = DESIRED_DISTANCE;
     const dungeon = dungeonGroup.current;
     if (dungeon) {
       raycaster.current.set(lookAt, desiredDir);
-      raycaster.current.far = desiredDistance;
+      raycaster.current.far = DESIRED_DISTANCE;
       raycaster.current.near = 0.01;
       const hits = raycaster.current.intersectObject(dungeon, true);
       if (hits.length > 0) allowedDistance = Math.max(MIN_DISTANCE, hits[0].distance - 0.3);
