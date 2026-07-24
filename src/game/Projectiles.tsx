@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh } from "three";
-import { type GameState, spawnFloatingText, killPlayer, handleSpecialEnemyDeath, markBossDefeated } from "./GameState";
+import { type GameState, spawnFloatingText, killPlayer, handleSpecialEnemyDeath, markBossDefeated, applyChill, applyStatusEffect } from "./GameState";
 import { applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { isWallTile } from "./maps/collision";
 import { PROJECTILE_POOL_SIZE, SOULS_PER_KILL, SOULS_PER_BOSS } from "./gameConstants";
@@ -66,6 +66,8 @@ export function Projectiles({ state }: { state: GameState }) {
             p.hp = Math.max(0, p.hp - dmg);
             p.hitFlashMs = 200;
             spawnFloatingText(state, `${dmg}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ff5555");
+            if (proj.effectType === "chill") applyChill(p, 1);
+            else if (proj.effectType) applyStatusEffect(p, proj.effectType);
             if (p.hp <= 0) killPlayer(state);
             remove = true;
           }
@@ -84,6 +86,10 @@ export function Projectiles({ state }: { state: GameState }) {
             const souls = applySoulsGainModifier(SOULS_PER_KILL, p.equipped, p.upgrades);
             p.stats.souls += souls;
             spawnFloatingText(state, `SLAIN — +${souls} souls`, enemy.position.clone().add(new THREE.Vector3(0, 2.4, 0)), "#ff5555");
+          } else if (proj.chillStacksOnHit) {
+            // Moonfrost Lance — only on a non-killing hit, matching the 2D
+            // source (an already-destroyed enemy has nothing left to chill).
+            applyChill(enemy, proj.chillStacksOnHit);
           }
           remove = true;
           break;

@@ -6,6 +6,7 @@ import { type BossState, type GameState, spawnFloatingText, spawnGroundHazard, s
 import { applyDamageReduction } from "./utils/equipment";
 import { isWallTile, resolveCollision } from "./maps/collision";
 import { bossMovesForType, bossVisualForType, BOSS_COMBAT, TIDEWARDEN_GRAB_TRIGGER_RANGE, TIDEWARDEN_HEAL_PUNISH_WINDOW_MS, type BossMove } from "./utils/bossData";
+import { PROJECTILE_EFFECT_BY_TYPE } from "./utils/statusEffects";
 
 const BOSS_RADIUS = 0.9;
 
@@ -90,7 +91,7 @@ function fireBossProjectile(boss: BossState, state: GameState, move: BossMove) {
   const dz = boss.windupTargetZ - boss.position.z;
   const len = Math.hypot(dx, dz) || 1;
   const dmg = Math.round(boss.baseDamage * move.damageMultiplier);
-  spawnProjectile(state, "enemy", boss.position.clone().setY(1.2), new THREE.Vector3(dx / len, 0, dz / len), 6, dmg, 14, hazardColorForBoss(boss.bossType));
+  spawnProjectile(state, "enemy", boss.position.clone().setY(1.2), new THREE.Vector3(dx / len, 0, dz / len), 6, dmg, 14, hazardColorForBoss(boss.bossType), undefined, undefined, PROJECTILE_EFFECT_BY_TYPE[boss.bossType]);
 }
 
 // Handles the strike itself once the windup(+hold) has elapsed. hasDealtDamageThisStrike

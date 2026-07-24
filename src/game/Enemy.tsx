@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type EnemyState, type GameState, enemyDamageForRole, spawnFloatingText, spawnProjectile, killPlayer } from "./GameState";
+import { type EnemyState, type GameState, enemyDamageForRole, spawnFloatingText, spawnProjectile, killPlayer, tickChill, chillSlowMultiplier } from "./GameState";
 import {
   ROLE_CONFIG,
   ARCHER_RETREAT_TRIGGER_DIST,
@@ -24,6 +24,7 @@ import {
   TOAD_LOB_ARC_HEIGHT,
 } from "./utils/enemyRoles";
 import { applyDamageReduction } from "./utils/equipment";
+import { PROJECTILE_EFFECT_BY_TYPE } from "./utils/statusEffects";
 import { hasLineOfSight } from "./utils/lineOfSight";
 import { isWallTile, resolveCollision } from "./maps/collision";
 import { findPath } from "./maps/pathfinding";
@@ -111,9 +112,10 @@ function updateChase(e: EnemyState, state: GameState, dist: number, dt: number, 
   const mapData = state.mapData;
   const p = state.player.position;
   const clearLOS = hasLineOfSight(e.position.x, e.position.z, p.x, p.z, (tx, ty) => isWallTile(mapData, tx, ty));
+  const speed = cfg.moveSpeed * chillSlowMultiplier(e);
   if (clearLOS) {
     e.path = [];
-    stepToward(e, p.x, p.z, dt, cfg.moveSpeed, mapData);
+    stepToward(e, p.x, p.z, dt, speed, mapData);
   } else {
     e.repathMs -= dtMs;
     if (e.path.length === 0 && e.repathMs <= 0) {
@@ -124,7 +126,7 @@ function updateChase(e: EnemyState, state: GameState, dist: number, dt: number, 
     if (e.path.length > 0) {
       const wp = e.path[0];
       if (Math.hypot(wp.x - e.position.x, wp.y - e.position.z) < 0.25) e.path.shift();
-      else stepToward(e, wp.x, wp.y, dt, cfg.moveSpeed, mapData);
+      else stepToward(e, wp.x, wp.y, dt, speed, mapData);
     }
   }
 }
@@ -142,7 +144,7 @@ function updateArcherAggro(e: EnemyState, state: GameState, dist: number, dt: nu
     const dx = e.position.x - p.x;
     const dz = e.position.z - p.z;
     const len = Math.hypot(dx, dz) || 1;
-    const moved = stepToward(e, e.position.x + (dx / len), e.position.z + (dz / len), dt, ARCHER_RETREAT_SPEED, mapData);
+    const moved = stepToward(e, e.position.x + (dx / len), e.position.z + (dz / len), dt, ARCHER_RETREAT_SPEED * chillSlowMultiplier(e), mapData);
     e.aiState = moved ? "retreat" : "cower";
     return;
   }
@@ -159,7 +161,7 @@ function updateArcherAggro(e: EnemyState, state: GameState, dist: number, dt: nu
       e.sidestepTargetX = undefined;
       e.sidestepTargetZ = undefined;
     } else {
-      stepToward(e, e.sidestepTargetX, e.sidestepTargetZ, dt, ARCHER_RETREAT_SPEED, mapData);
+      stepToward(e, e.sidestepTargetX, e.sidestepTargetZ, dt, ARCHER_RETREAT_SPEED * chillSlowMultiplier(e), mapData);
     }
     return;
   }
@@ -188,7 +190,10 @@ function fireRangedShot(e: EnemyState, state: GameState) {
     ARCHER_PROJECTILE_SPEED,
     dmg,
     ARCHER_PROJECTILE_MAX_RANGE,
-    "#88ddff"
+    "#88ddff",
+    undefined,
+    undefined,
+    PROJECTILE_EFFECT_BY_TYPE[e.type]
   );
   void cfg;
 }
@@ -196,6 +201,7 @@ function fireRangedShot(e: EnemyState, state: GameState) {
 // ---- Wolf (bespoke circle-strafe aggro; strike/recover use moveShape "lunge") ----
 function updateWolfAggro(e: EnemyState, state: GameState, dist: number, dt: number, dtMs: number) {
   const cfg = ROLE_CONFIG[e.role];
+  const speed = cfg.moveSpeed * chillSlowMultiplier(e);
   const p = state.player.position;
   const mapData = state.mapData;
   if (e.wolfCircleDir === 0) e.wolfCircleDir = Math.random() < 0.5 ? 1 : -1;
@@ -205,7 +211,7 @@ function updateWolfAggro(e: EnemyState, state: GameState, dist: number, dt: numb
     e.wolfCommitElapsedMs = 0;
     e.wolfCommitThresholdMs = 0;
     e.wolfCircleRadius = 0;
-    stepToward(e, p.x, p.z, dt, cfg.moveSpeed, mapData);
+    stepToward(e, p.x, p.z, dt, speed, mapData);
     return;
   }
 
@@ -213,11 +219,11 @@ function updateWolfAggro(e: EnemyState, state: GameState, dist: number, dt: numb
   if (e.wolfCommitThresholdMs === 0) e.wolfCommitThresholdMs = WOLF_COMMIT_MIN_MS + Math.random() * (WOLF_COMMIT_MAX_MS - WOLF_COMMIT_MIN_MS);
 
   const angle = Math.atan2(e.position.z - p.z, e.position.x - p.x);
-  const angularSpeed = cfg.moveSpeed / e.wolfCircleRadius;
+  const angularSpeed = speed / e.wolfCircleRadius;
   const newAngle = angle + e.wolfCircleDir * angularSpeed * dt;
   const targetX = p.x + Math.cos(newAngle) * e.wolfCircleRadius;
   const targetZ = p.z + Math.sin(newAngle) * e.wolfCircleRadius;
-  const moved = stepToward(e, targetX, targetZ, dt, cfg.moveSpeed, mapData);
+  const moved = stepToward(e, targetX, targetZ, dt, speed, mapData);
 
   if (!moved) {
     if (dist <= WOLF_DIRECT_APPROACH_WINDUP_DIST) enterWindup(e, state);
@@ -274,7 +280,7 @@ function fireToadShot(e: EnemyState, state: GameState) {
   const dz = e.windupTargetZ - e.position.z;
   const len = Math.hypot(dx, dz) || 1;
   const dmg = Math.round(enemyDamageForRole(e));
-  spawnProjectile(state, "enemy", e.position.clone().setY(0.5), new THREE.Vector3(dx / len, 0, dz / len), 5, dmg, len, "#66ff44", TOAD_LOB_ARC_HEIGHT);
+  spawnProjectile(state, "enemy", e.position.clone().setY(0.5), new THREE.Vector3(dx / len, 0, dz / len), 5, dmg, len, "#66ff44", TOAD_LOB_ARC_HEIGHT, undefined, PROJECTILE_EFFECT_BY_TYPE[e.type]);
 }
 
 // Idle -> chase -> windup -> strike -> recover, driven by ROLE_CONFIG timings.
@@ -300,6 +306,7 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
     const dtMs = dt * 1000;
     const cfg = ROLE_CONFIG[e.role];
     if (e.hitFlashMs > 0) e.hitFlashMs = Math.max(0, e.hitFlashMs - dtMs);
+    tickChill(e, dtMs);
 
     const toPlayer = new THREE.Vector3().subVectors(p.position, e.position);
     const dist = toPlayer.length();

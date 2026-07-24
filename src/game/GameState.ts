@@ -5,6 +5,7 @@ import { getEffectiveMaxHP, type ItemUpgrades } from "./utils/equipment";
 import { getItemDef, RARITY_COLOR, type ItemSlot } from "./utils/items";
 import { SECRET_FIGHT_BY_AREA, TOWER_KNIGHT_SPLIT_TYPES } from "./utils/secretFights";
 import { ENEMY_BASE_DAMAGE, FLASK_START_CHARGES, PROJECTILE_POOL_SIZE, type MeleeAction } from "./gameConstants";
+import { STATUS_EFFECT_CONFIG, CHILL_MAX_STACKS, CHILL_DURATION_MS, CHILL_SLOW_MULTIPLIER_BY_STACKS, type StatusEffectType, type ProjectileEffectType } from "./utils/statusEffects";
 import type { MapData } from "./maps/MapGenerator";
 
 export interface PlayerState {
@@ -37,12 +38,16 @@ export interface PlayerState {
   flaskCharges: number;
   maxFlaskCharges: number;
   lastHealAtMs: number; // performance.now() timestamp, read by the Tidewarden's heal-punish grab trigger
+  statusEffects: { type: StatusEffectType; remainingMs: number; tickCooldownMs: number }[];
+  chillStacks: number;
+  chillRemainingMs: number;
 }
 
 export type EnemyAIState = "idle" | "chase" | "windup" | "strike" | "recover" | "retreat" | "cower" | "dead";
 
 export interface EnemyState {
   id: string;
+  type: string; // raw spawn type id (e.g. "enemy_frost_archer") — role collapses area-flavor variants together, so this is kept separately for statusEffects.ts's PROJECTILE_EFFECT_BY_TYPE lookup
   role: EnemyRole;
   areaDamageMultiplier: number;
   position: THREE.Vector3;
@@ -54,6 +59,8 @@ export interface EnemyState {
   stunnedMs: number; // externally-forced (shield bash) — overrides the normal state machine while > 0
   path: { x: number; y: number }[]; // BFS waypoints (tile-center coords), consumed front-to-back
   repathMs: number; // countdown until the next repath attempt is allowed
+  chillStacks: number; // Moonfrost Lance only — enemies never get poison/burn ticks, only players do
+  chillRemainingMs: number;
 
   // Locked at windup start — lunge targets, and ranged/toad shot aim, always
   // fire at where the player WAS at windup start, not a live position.
@@ -169,6 +176,8 @@ export interface ProjectileState {
   maxRange: number;
   arcHeight?: number; // toad lob visual only — the x/z motion is a flat lerp either way
   homingDegPerSec?: number; // player spells only (Ashmote) — weak cone-limited steering toward the nearest enemy
+  effectType?: ProjectileEffectType; // enemy-owned only (Ember Archer/Toad/Wyrmling/Molten Archon burn+poison, Frost Archer chill)
+  chillStacksOnHit?: number; // player-owned only (Moonfrost Lance) — enemy chill carries an explicit stack count instead of effectType's flat 1
   color: string;
 }
 
@@ -274,6 +283,9 @@ export function createPlayerState(spawn: { x: number; y: number }): PlayerState 
     flaskCharges: FLASK_START_CHARGES,
     maxFlaskCharges: FLASK_START_CHARGES,
     lastHealAtMs: -Infinity,
+    statusEffects: [],
+    chillStacks: 0,
+    chillRemainingMs: 0,
   };
 }
 
@@ -302,11 +314,12 @@ export function createBossState(bossType: string, name: string, maxHp: number, b
   };
 }
 
-export function createEnemyState(id: string, role: EnemyRole, position: THREE.Vector3, areaDamageMultiplier: number): EnemyState {
+export function createEnemyState(id: string, type: string, role: EnemyRole, position: THREE.Vector3, areaDamageMultiplier: number): EnemyState {
   const cfg = ROLE_CONFIG[role];
   const maxHp = Math.round(160 * cfg.hpMultiplier);
   return {
     id,
+    type,
     role,
     areaDamageMultiplier,
     position: position.clone(),
@@ -318,6 +331,8 @@ export function createEnemyState(id: string, role: EnemyRole, position: THREE.Ve
     stunnedMs: 0,
     path: [],
     repathMs: 0,
+    chillStacks: 0,
+    chillRemainingMs: 0,
     windupTargetX: 0,
     windupTargetZ: 0,
     lungeFromX: 0,
@@ -353,7 +368,7 @@ export function createEnemyState(id: string, role: EnemyRole, position: THREE.Ve
 export function createGameState(mapData: MapData, area: Area, areaDamageMultiplier: number, progress: ProgressFlags = createProgressFlags(), floor: Floor = Floor.BASEMENT): GameState {
   const enemies = mapData.enemySpawns.map((spawn, i) => {
     const role = roleForType(spawn.type);
-    return createEnemyState(`${spawn.type}-${i}`, role, new THREE.Vector3(spawn.x + 0.5, 0, spawn.y + 0.5), areaDamageMultiplier);
+    return createEnemyState(`${spawn.type}-${i}`, spawn.type, role, new THREE.Vector3(spawn.x + 0.5, 0, spawn.y + 0.5), areaDamageMultiplier);
   });
 
   const areaConfig = AREA_CONFIGS[area];
@@ -414,7 +429,7 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
 export function spawnEnemyAt(state: GameState, type: string, worldX: number, worldZ: number): EnemyState {
   const role = roleForType(type);
   const id = `${type}-secret-${state.nextEnemySpawnId++}`;
-  const e = createEnemyState(id, role, new THREE.Vector3(worldX, 0, worldZ), AREA_CONFIGS[state.area].enemyDamageMultiplier);
+  const e = createEnemyState(id, type, role, new THREE.Vector3(worldX, 0, worldZ), AREA_CONFIGS[state.area].enemyDamageMultiplier);
   state.enemies.push(e);
   return e;
 }
@@ -533,7 +548,9 @@ export function spawnProjectile(
   maxRange: number,
   color: string,
   arcHeight?: number,
-  homingDegPerSec?: number
+  homingDegPerSec?: number,
+  effectType?: ProjectileEffectType,
+  chillStacksOnHit?: number
 ) {
   if (state.projectiles.length >= PROJECTILE_POOL_SIZE) return;
   state.projectiles.push({
@@ -547,8 +564,66 @@ export function spawnProjectile(
     maxRange,
     arcHeight,
     homingDegPerSec,
+    effectType,
+    chillStacksOnHit,
     color,
   });
+}
+
+// Shared by PlayerState and EnemyState (both carry chillStacks/
+// chillRemainingMs) — Moonfrost Lance/Frost Archer's stacking slow.
+interface ChillHolder {
+  chillStacks: number;
+  chillRemainingMs: number;
+}
+
+export function applyChill(holder: ChillHolder, stacks: number) {
+  holder.chillStacks = Math.min(CHILL_MAX_STACKS, holder.chillStacks + stacks);
+  holder.chillRemainingMs = CHILL_DURATION_MS; // refreshed, not extended — the whole stack expires together
+}
+
+export function tickChill(holder: ChillHolder, dtMs: number) {
+  if (holder.chillStacks <= 0) return;
+  holder.chillRemainingMs -= dtMs;
+  if (holder.chillRemainingMs <= 0) holder.chillStacks = 0;
+}
+
+export function chillSlowMultiplier(holder: ChillHolder): number {
+  return CHILL_SLOW_MULTIPLIER_BY_STACKS[holder.chillStacks] ?? 1;
+}
+
+// No stacking — reapplying the same type just extends/refreshes its
+// duration, same as the 2D source, to avoid a repeated-hits damage spiral.
+export function applyStatusEffect(p: PlayerState, type: StatusEffectType) {
+  const cfg = STATUS_EFFECT_CONFIG[type];
+  const existing = p.statusEffects.find((e) => e.type === type);
+  if (existing) existing.remainingMs = cfg.durationMs;
+  else p.statusEffects.push({ type, remainingMs: cfg.durationMs, tickCooldownMs: cfg.tickIntervalMs });
+}
+
+// Ticks poison/burn DoTs on the player — called every frame from Player.tsx
+// regardless of rolling. Dodge-roll i-frames deliberately do NOT block an
+// already-applied tick (design doc section 6): poison already in your
+// system keeps hurting mid-roll, unlike a fresh hit.
+export function updateStatusEffects(state: GameState, dtMs: number) {
+  const p = state.player;
+  for (let i = p.statusEffects.length - 1; i >= 0; i--) {
+    const effect = p.statusEffects[i];
+    effect.remainingMs -= dtMs;
+    if (effect.remainingMs <= 0) {
+      p.statusEffects.splice(i, 1);
+      continue;
+    }
+    effect.tickCooldownMs -= dtMs;
+    if (effect.tickCooldownMs > 0) continue;
+    const cfg = STATUS_EFFECT_CONFIG[effect.type];
+    effect.tickCooldownMs = cfg.tickIntervalMs;
+    if (p.dead) continue;
+    const tickDamage = Math.round(cfg.dps * (cfg.tickIntervalMs / 1000));
+    p.hp = Math.max(0, p.hp - tickDamage);
+    spawnFloatingText(state, `-${tickDamage}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), cfg.color);
+    if (p.hp <= 0) killPlayer(state);
+  }
 }
 
 // Design doc's death economy, simplified for this slice: souls are lost

@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile, markBossDefeated } from "./GameState";
+import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile, markBossDefeated, tickChill, chillSlowMultiplier, updateStatusEffects } from "./GameState";
 import { computeWeaponDamage, computeSpellDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { CINDER_WRETCH_DETONATE_RADIUS, CINDER_WRETCH_DETONATE_DAMAGE_MULT } from "./utils/enemyRoles";
 import { STAMINA_REGEN_PER_SEC } from "./utils/constants";
@@ -46,6 +46,8 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     const regen = getEffectiveStaminaRegenPerSec(STAMINA_REGEN_PER_SEC, p.equipped, p.upgrades);
     if (!p.rolling) p.stamina = Math.min(p.maxStamina, p.stamina + regen * dt);
     p.fp = Math.min(p.maxFp, p.fp + FP_REGEN_PER_SEC * dt);
+    tickChill(p, dtMs);
+    updateStatusEffects(state, dtMs);
 
     // Aim reticle direction — the camera's forward vector flattened onto the
     // ground plane. Design doc section 1: since this build's camera is a
@@ -141,6 +143,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         let speed = getEffectiveMoveSpeed(PLAYER_SPEED, p.equipped, p.upgrades);
         if (sprinting) speed *= 1.4;
         if (p.casting) speed *= CAST_MOVE_SPEED_MULT;
+        speed *= chillSlowMultiplier(p);
         p.position.x += moveX * speed * dt;
         p.position.z += moveZ * speed * dt;
         if (!p.casting) p.facing = Math.atan2(moveX, moveZ);
@@ -174,7 +177,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
           if (def.spell) {
             const dmg = computeSpellDamage(p.stats, def.spell, p.upgrades, p.castSpellId);
             const origin = p.position.clone().addScaledVector(aimDirRef.current, 0.5).setY(0.9);
-            spawnProjectile(state, "player", origin, aimDirRef.current.clone(), def.spell.speed ?? 8, dmg, def.spell.range, def.spell.color, undefined, def.spell.homingDegPerSec);
+            spawnProjectile(state, "player", origin, aimDirRef.current.clone(), def.spell.speed ?? 8, dmg, def.spell.range, def.spell.color, undefined, def.spell.homingDegPerSec, undefined, def.spell.chillStacks);
           }
           p.casting = false;
           p.castSpellId = null;
@@ -185,12 +188,16 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     actions.attackHeavy = false;
     actions.shieldBash = false;
 
-    // Heal — F key. Blocked while casting.
-    if (!p.casting && actions.heal && p.flaskCharges > 0 && p.hp < p.maxHp) {
+    // Heal — F key. Blocked while casting. A full-HP player can still drink
+    // purely to cure poison/burn (design doc section 6) — the "already at
+    // full HP" bail must not skip a drink that's only being used to cure.
+    // Chill is deliberately NOT cured by this — same as the 2D source.
+    if (!p.casting && actions.heal && p.flaskCharges > 0 && (p.hp < p.maxHp || p.statusEffects.length > 0)) {
       p.flaskCharges -= 1;
       const healFrac = getEffectiveHealFraction(FLASK_HEAL_FRACTION, p.equipped, p.upgrades);
       p.hp = Math.min(p.maxHp, p.hp + p.maxHp * healFrac);
       p.lastHealAtMs = performance.now();
+      p.statusEffects = [];
       spawnFloatingText(state, "+HP", p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#66ff66");
     }
     actions.heal = false;
