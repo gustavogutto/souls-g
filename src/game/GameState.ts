@@ -202,16 +202,52 @@ export interface ProgressFlags {
   prologueComplete: boolean;
   areaBossDefeated: Partial<Record<Area, boolean>>;
   flaviannaMet: boolean; // met once in Area 2 floor 3 (merchantNpcSpawn) — from then on she's a Hearth NPC instead
+  // Checkpoint flames (design doc section 2) — keyed by flameKey(area,
+  // floor) below. A plain object (not a Set) so it round-trips through
+  // JSON in SaveData without a custom (de)serializer.
+  discoveredFlames: Partial<Record<string, true>>;
 }
 
 export function createProgressFlags(): ProgressFlags {
-  return { prologueComplete: false, areaBossDefeated: {}, flaviannaMet: false };
+  return { prologueComplete: false, areaBossDefeated: {}, flaviannaMet: false, discoveredFlames: {} };
 }
 
 // Called from both the melee (Player.tsx) and spell (Projectiles.tsx) boss
 // kill paths — kept as one function so the two sites can't drift.
 export function markBossDefeated(state: GameState) {
   state.progress.areaBossDefeated[state.area] = true;
+}
+
+// Checkpoint flames (design doc section 2) — the Hearth/Prologue don't
+// participate in the inter-area fast-travel network, only the 5 real
+// areas' floors do, so callers should only ever pass those.
+export function flameKey(area: Area, floor: Floor): string {
+  return `${area}-${floor}`;
+}
+
+export function markFlameDiscovered(state: GameState, area: Area, floor: Floor) {
+  state.progress.discoveredFlames[flameKey(area, floor)] = true;
+}
+
+export function listDiscoveredFlames(progress: ProgressFlags): { area: Area; floor: Floor }[] {
+  return Object.keys(progress.discoveredFlames)
+    .filter((k) => progress.discoveredFlames[k])
+    .map((k) => {
+      const [areaStr, floorStr] = k.split("-");
+      return { area: Number(areaStr) as Area, floor: floorStr as Floor };
+    });
+}
+
+// REST — full heal, matching the 2D source's healFull() (also refills
+// flasks, same as its "flasks refill on rest/warp/death-respawn" rule).
+export function restAtFlame(state: GameState) {
+  const p = state.player;
+  p.hp = p.maxHp;
+  p.stamina = p.maxStamina;
+  p.fp = p.maxFp;
+  p.flaskCharges = p.maxFlaskCharges;
+  p.statusEffects = [];
+  p.chillStacks = 0;
 }
 
 export interface GameState {

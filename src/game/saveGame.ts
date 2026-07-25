@@ -15,7 +15,12 @@ import type { GameState, ProgressFlags } from "./GameState";
 // area+floor rather than resuming the exact same one. Full floor-state
 // persistence is a separate, not-yet-built gap.
 const SAVE_KEY = "echoes_hohenberg_3d_save_v1";
-const SCHEMA_VERSION = 4; // v4 adds `stash` (Hearth personal storage)
+// v5 adds `progress.discoveredFlames`, `progress.flaviannaMet` — both live
+// inside the already-saved `progress` object, so schemaVersion must bump
+// whenever ProgressFlags itself grows a field an old save won't have, or
+// Object.keys() on a missing field would throw for anyone loading an
+// older save. v6 adds `fp`.
+const SCHEMA_VERSION = 6;
 
 export interface SaveData {
   schemaVersion: number;
@@ -25,14 +30,18 @@ export interface SaveData {
   equipped: Partial<Record<ItemSlot, string>>;
   upgrades: ItemUpgrades;
   hp: number;
+  fp: number;
   flaskCharges: number;
   progress: ProgressFlags;
   stash: string[];
 }
 
-export function saveGame(state: GameState) {
+// Shared by saveGame() (localStorage) and GameScene's in-memory carry-over
+// between area/floor transitions within the same session (see its own
+// carrySaveRef comment for why that second use exists).
+export function toSaveData(state: GameState): SaveData {
   const p = state.player;
-  const data: SaveData = {
+  return {
     schemaVersion: SCHEMA_VERSION,
     area: state.area,
     floor: state.floor,
@@ -40,10 +49,15 @@ export function saveGame(state: GameState) {
     equipped: p.equipped,
     upgrades: p.upgrades,
     hp: p.hp,
+    fp: p.fp,
     flaskCharges: p.flaskCharges,
     progress: state.progress,
     stash: p.stash,
   };
+}
+
+export function saveGame(state: GameState) {
+  const data = toSaveData(state);
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {
@@ -94,6 +108,7 @@ export function applySaveData(state: GameState, data: SaveData) {
   p.maxHp = getEffectiveMaxHP(p.stats.vigor, p.equipped, p.upgrades);
   p.hp = Math.min(data.hp, p.maxHp);
   p.maxStamina = getMaxStamina(p.stats.endurance);
+  p.fp = Math.min(data.fp, p.maxFp);
   p.flaskCharges = Math.min(data.flaskCharges, p.maxFlaskCharges);
   p.stash = [...data.stash];
 }

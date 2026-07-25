@@ -16,12 +16,14 @@ import { HearthGates, HEARTH_GATE_LABELS } from "./HearthGates";
 import { HearthNPCs, type HearthNpcId } from "./HearthNPCs";
 import { FlaviannaEncounter } from "./FlaviannaEncounter";
 import { MartynaPanel, VarnPanel, StashPanel, TideRefusedPanel, FlaviannaPanel } from "./HearthNPCPanels";
+import { Flames } from "./Flames";
+import { FlamePanel } from "./FlamePanel";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
 import { AreaDebugPicker } from "./AreaDebugPicker";
 import { InventoryPanel } from "./InventoryPanel";
-import { loadGame, saveGame, applySaveData, type SaveData } from "./saveGame";
+import { loadGame, saveGame, applySaveData, toSaveData, type SaveData } from "./saveGame";
 import { getAreaTheme } from "./utils/areaThemes";
 
 const AUTOSAVE_INTERVAL_MS = 5000;
@@ -82,6 +84,7 @@ function Floor1Gameplay({
   onStateReady,
   onAreaChange,
   onFloorAdvance,
+  onWarpToFlame,
 }: {
   area: Area;
   floor: Floor;
@@ -90,13 +93,17 @@ function Floor1Gameplay({
   onStateReady: (state: GameState) => void;
   onAreaChange: (a: Area) => void;
   onFloorAdvance: (f: Floor) => void;
+  onWarpToFlame: (a: Area, f: Floor) => void;
 }) {
   const dungeonGroupRef = useRef<THREE.Group>(null!);
   const mapData = useMemo(() => (area === Area.HEARTH ? generateHearthMap() : generateMap(floor, area)), [area, floor]);
   const theme = useMemo(() => getAreaTheme(area), [area]);
   const [state] = useState<GameState>(() => {
     const s = createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier, progress, floor);
-    if (initialSave && initialSave.area === area && initialSave.floor === floor) applySaveData(s, initialSave);
+    // Always apply whatever the caller passed — GameScene's carrySaveRef is
+    // kept current across every transition (see its own comment), not just
+    // matched against the very first page-load position.
+    if (initialSave) applySaveData(s, initialSave);
     return s;
   });
   const floorIdx = FLOOR_SEQUENCE.indexOf(floor);
@@ -104,6 +111,7 @@ function Floor1Gameplay({
   const input = useGameInput();
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [activeNpc, setActiveNpc] = useState<HearthNpcId | null>(null);
+  const [flameOpen, setFlameOpen] = useState(false);
   const gateLabels = area === Area.HEARTH ? HEARTH_GATE_LABELS(state) : [];
 
   useEffect(() => {
@@ -139,6 +147,7 @@ function Floor1Gameplay({
         <HearthGates state={state} input={input} onTravel={onAreaChange} />
         <HearthNPCs state={state} input={input} onTalk={setActiveNpc} />
         <FlaviannaEncounter state={state} input={input} onTalk={() => setActiveNpc("flavianna")} />
+        {isMultiFloorArea(area) && <Flames state={state} input={input} onInteract={() => setFlameOpen(true)} />}
         <EndPortalWatcher
           state={state}
           onReachEnd={() => {
@@ -163,6 +172,13 @@ function Floor1Gameplay({
       <StashPanel state={state} open={activeNpc === "stash"} onClose={() => setActiveNpc(null)} />
       <TideRefusedPanel open={activeNpc === "tide_refused"} onClose={() => setActiveNpc(null)} />
       <FlaviannaPanel state={state} open={activeNpc === "flavianna"} onClose={() => setActiveNpc(null)} />
+      <FlamePanel
+        state={state}
+        open={flameOpen}
+        onClose={() => setFlameOpen(false)}
+        onWarp={onWarpToFlame}
+        onReturnHearth={() => onAreaChange(Area.HEARTH)}
+      />
     </>
   );
 }
@@ -177,19 +193,42 @@ export function GameScene() {
   const [floor, setFloor] = useState<Floor>(initialSave?.floor ?? Floor.BASEMENT);
   const liveStateRef = useRef<GameState | null>(null);
   const progressRef = useRef<ProgressFlags>(initialSave?.progress ?? createProgressFlags());
+  // Real bug fix: `initialSave` above is a one-time snapshot from page load
+  // and never changes again, but Floor1Gameplay's `key={area}-{floor}`
+  // remounts on every single area/floor transition, throwing the live
+  // player away and building a brand new default one each time (stats,
+  // gear, HP, souls, stash — all of it) unless a save happens to be
+  // re-applied. This ref is what actually survives transitions: it's
+  // reassigned to the live player's current data immediately before every
+  // transition, so the next mount always carries the real player forward
+  // instead of resetting to createPlayerState() defaults.
+  const carrySaveRef = useRef<SaveData | null>(initialSave);
+
+  const captureCarry = () => {
+    if (!liveStateRef.current) return;
+    saveGame(liveStateRef.current);
+    carrySaveRef.current = toSaveData(liveStateRef.current);
+    liveStateRef.current = null;
+  };
 
   const handleAreaChange = (next: Area) => {
     if (area === Area.PROLOGUE) progressRef.current.prologueComplete = true;
-    if (liveStateRef.current) saveGame(liveStateRef.current);
-    liveStateRef.current = null;
+    captureCarry();
     setFloor(Floor.BASEMENT); // a fresh area (or the debug picker) always starts at its own floor 1
     setArea(next);
   };
 
   const handleFloorAdvance = (next: Floor) => {
-    if (liveStateRef.current) saveGame(liveStateRef.current);
-    liveStateRef.current = null;
+    captureCarry();
     setFloor(next);
+  };
+
+  // TRAVEL — a one-way warp to a specific discovered flame's exact area AND
+  // floor (unlike handleAreaChange, which always resets to floor 1).
+  const handleWarp = (nextArea: Area, nextFloor: Floor) => {
+    captureCarry();
+    setArea(nextArea);
+    setFloor(nextFloor);
   };
 
   return (
@@ -198,13 +237,14 @@ export function GameScene() {
         key={`${area}-${floor}`}
         area={area}
         floor={floor}
-        initialSave={initialSave}
+        initialSave={carrySaveRef.current}
         progress={progressRef.current}
         onStateReady={(state) => {
           liveStateRef.current = state;
         }}
         onAreaChange={handleAreaChange}
         onFloorAdvance={handleFloorAdvance}
+        onWarpToFlame={handleWarp}
       />
       <AreaDebugPicker area={area} onChange={handleAreaChange} />
     </div>
