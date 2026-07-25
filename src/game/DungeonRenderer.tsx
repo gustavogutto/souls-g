@@ -79,8 +79,12 @@ function buildDungeonGeometry(mapData: MapData, theme: AreaTheme) {
   return { floorGeometry, wallGeometry };
 }
 
-export function DungeonRenderer({ mapData, theme }: { mapData: MapData; theme: AreaTheme }) {
-  const { floorGeometry, wallGeometry } = useMemo(() => buildDungeonGeometry(mapData, theme), [mapData, theme]);
+// `revealVersion` has no effect on the geometry-build function itself — it
+// exists purely as a dependency to force this memo to rebuild when a tile's
+// type is mutated in place at runtime (illusory walls), since neither
+// `mapData` nor `theme` change identity when that happens.
+export function DungeonRenderer({ mapData, theme, revealVersion }: { mapData: MapData; theme: AreaTheme; revealVersion?: number }) {
+  const { floorGeometry, wallGeometry } = useMemo(() => buildDungeonGeometry(mapData, theme), [mapData, theme, revealVersion]);
 
   useEffect(() => {
     return () => {

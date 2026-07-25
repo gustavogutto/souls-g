@@ -6,16 +6,16 @@ import { SECRET_FIGHT_BY_AREA } from "../utils/secretFights";
 // flood-tile algorithm and the "normal floor" spawn fields are ported
 // near-verbatim (the algorithm has zero engine dependency — only the
 // isometric-sprite rendering step doesn't carry over, and that's replaced by
-// DungeonRenderer.tsx). Deliberately NOT yet ported: illusoryWallSpawn, the
-// seamless-portal prototype (portals/portalAnchor/layerFlameSpawn), and
-// "The Ring" archetype's shortcut-gate loop corridor (the structural loop
-// bypass corridor itself is also skipped for the same reason — it's a
-// bonus route, not required for start->boss->end connectivity).
-// fallenAdventurerSpawn, merchantNpcSpawn (Flavianna), and vaultSpawn (the
-// Mystery Vault) are now ported; breakableSpawns (crates) is a new addition
-// scattered on free tiles rather than the 2D source's hand-placed prologue
-// coordinates, since this port's prologue is procedural rather than
-// hand-authored.
+// DungeonRenderer.tsx). Deliberately NOT yet ported: the seamless-portal
+// prototype (portals/portalAnchor/layerFlameSpawn), and "The Ring"
+// archetype's shortcut-gate loop corridor (the structural loop bypass
+// corridor itself is also skipped for the same reason — it's a bonus
+// route, not required for start->boss->end connectivity).
+// fallenAdventurerSpawn, merchantNpcSpawn (Flavianna), vaultSpawn (the
+// Mystery Vault), and illusoryWallSpawn are now ported; breakableSpawns
+// (crates) is a new addition scattered on free tiles rather than the 2D
+// source's hand-placed prologue coordinates, since this port's prologue is
+// procedural rather than hand-authored.
 
 export interface TileData {
   x: number;
@@ -67,6 +67,12 @@ export interface MapData {
   // scatter already claims, same acceptable-absence precedent as
   // merchantNpcSpawn/leverSpawn above.
   vaultSpawn?: { chestX: number; chestY: number; leverX: number; leverY: number; outcome: "jackpot" | "decent" | "cursed"; itemId: string };
+  // Illusory wall (design doc section 13) — wallX/wallY and revealX/revealY
+  // stay genuinely "wall" TileData exactly as generated (zero risk to
+  // connectivity/pathing elsewhere); the reveal is a runtime-only override
+  // once interacted with from fromX/fromY (see GameState.openIllusoryWall).
+  // No telegraph at all — indistinguishable from any other wall until then.
+  illusoryWallSpawn?: { wallX: number; wallY: number; fromX: number; fromY: number; revealX: number; revealY: number; itemId: string };
   // Hearth-only (see generateHearthMap): one gate per travel destination,
   // rendered/interacted by HearthGates.tsx. Undefined on every normal
   // procedurally-generated floor.
@@ -595,6 +601,35 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     }
   }
 
+  // Illusory wall — finds a wall tile directly adjacent to an existing
+  // floor tile whose OTHER neighbor (continuing the same direction, 2
+  // tiles from the floor tile) is also genuinely wall in the raw grid —
+  // that far tile becomes a hidden 1-tile alcove. Deliberately does not
+  // touch `tiles`/rawMap here; both stay real "wall" TileData exactly as
+  // generated, so there's zero risk to connectivity/pathing invariants.
+  let illusoryWallSpawn: MapData["illusoryWallSpawn"];
+  {
+    const dirs: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const candidates = [...floorTiles].sort(() => Math.random() - 0.5).slice(0, 200);
+    outerIllusory: for (const tile of candidates) {
+      for (const [dx, dy] of dirs) {
+        const wx = tile.x + dx;
+        const wy = tile.y + dy;
+        const rx = tile.x + dx * 2;
+        const ry = tile.y + dy * 2;
+        if (rx < 1 || rx >= width - 1 || ry < 1 || ry >= height - 1) continue;
+        if (rawMap[wy]?.[wx] !== 1 || rawMap[ry]?.[rx] !== 1) continue;
+        const wallKey = `${wx},${wy}`;
+        const revealKey = `${rx},${ry}`;
+        if (usedTiles.has(wallKey) || usedTiles.has(revealKey)) continue;
+        usedTiles.add(wallKey);
+        usedTiles.add(revealKey);
+        illusoryWallSpawn = { wallX: wx, wallY: wy, fromX: tile.x, fromY: tile.y, revealX: rx, revealY: ry, itemId: getNextChestItem() };
+        break outerIllusory;
+      }
+    }
+  }
+
   const normalRoomsForChests = rooms.filter((r) => r.tag === "normal");
   const targetChests = areaConfig.numChests || 6;
   for (let i = chestSpawns.length; i < targetChests; i++) {
@@ -714,7 +749,7 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     tiles, width, height, playerSpawn, enemySpawns, chestSpawns, doorSpawns,
     bossSpawn, cellarStairs, endPoint, startPoint, bossGateDoor,
     ashenFlameSpawn, startFlameSpawn, propSpawns, leverSpawn, merchantNpcSpawn,
-    fallenAdventurerSpawn, breakableSpawns, vaultSpawn,
+    fallenAdventurerSpawn, breakableSpawns, vaultSpawn, illusoryWallSpawn,
   };
 }
 

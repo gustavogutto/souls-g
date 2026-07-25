@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh } from "three";
-import { openChest, triggerSecretFight, lootFallenAdventurer, pullVaultLever, openVault, type ChestState, type GameState } from "./GameState";
+import { openChest, triggerSecretFight, lootFallenAdventurer, pullVaultLever, openVault, openIllusoryWall, type ChestState, type GameState } from "./GameState";
 import type { GameInput } from "./input";
 
 const INTERACT_RANGE = 1.4;
@@ -131,7 +131,7 @@ function VaultChest({ state }: { state: GameState }) {
 // pulse-consumption follows the same one-shot pattern as Player.tsx's own
 // actions (roll/heal/attack), just owned here instead since neither chests
 // nor the lever are combat state.
-export function Interactables({ state, input }: { state: GameState; input: GameInput }) {
+export function Interactables({ state, input, onIllusoryWallRevealed }: { state: GameState; input: GameInput; onIllusoryWallRevealed?: () => void }) {
   useFrame(() => {
     if (state.paused) return;
     const p = state.player;
@@ -169,6 +169,14 @@ export function Interactables({ state, input }: { state: GameState; input: GameI
           const dx = v.chestX + 0.5 - p.position.x;
           const dz = v.chestY + 0.5 - p.position.z;
           if (Math.hypot(dx, dz) <= INTERACT_RANGE) openVault(state);
+        }
+      }
+      const iw = state.mapData.illusoryWallSpawn;
+      if (iw && !state.illusoryWallOpened) {
+        const dx = iw.fromX + 0.5 - p.position.x;
+        const dz = iw.fromY + 0.5 - p.position.z;
+        if (Math.hypot(dx, dz) <= INTERACT_RANGE && openIllusoryWall(state)) {
+          onIllusoryWallRevealed?.();
         }
       }
     }

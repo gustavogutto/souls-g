@@ -278,6 +278,7 @@ export interface GameState {
   brokenCrates: Set<string>; // `${x},${y}` keys into mapData.breakableSpawns
   vaultLeverPulled: boolean;
   vaultOpened: boolean;
+  illusoryWallOpened: boolean;
   hazards: GroundHazard[];
   nextHazardId: number;
   // True while mapData.bossGateDoor should block player movement (see
@@ -470,6 +471,7 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     brokenCrates: new Set(),
     vaultLeverPulled: false,
     vaultOpened: false,
+    illusoryWallOpened: false,
     hazards: [],
     nextHazardId: 0,
     gateLocked: !!(boss && mapData.bossGateDoor),
@@ -595,6 +597,28 @@ export function openVault(state: GameState) {
       }
     }
   }
+}
+
+// Illusory wall (design doc section 13) — flips both the wall tile and its
+// hidden alcove to real "floor" TileData so the existing tile-grid
+// collision (isWallTile) picks it up immediately, no separate walkability
+// override needed. Returns whether it just fired (false if already opened
+// or there's no spawn on this floor) so the caller (Interactables.tsx)
+// knows whether to force DungeonRenderer to rebuild its merged geometry —
+// mutating mapData.tiles in place doesn't itself trigger DungeonRenderer's
+// useMemo, since neither `mapData` nor `theme` (its only deps) change.
+export function openIllusoryWall(state: GameState): boolean {
+  const iw = state.mapData.illusoryWallSpawn;
+  if (!iw || state.illusoryWallOpened) return false;
+  state.illusoryWallOpened = true;
+  for (const [tx, ty] of [[iw.wallX, iw.wallY], [iw.revealX, iw.revealY]] as const) {
+    const index = ty * state.mapData.width + tx;
+    const tile = state.mapData.tiles[index];
+    if (tile) tile.type = "floor";
+  }
+  grantItem(state, iw.itemId);
+  spawnFloatingText(state, "The wall gives way.", new THREE.Vector3(iw.wallX + 0.5, 2, iw.wallY + 0.5), "#9fae9f");
+  return true;
 }
 
 // Spawns the fight's starting roster at the lever and marks it triggered —

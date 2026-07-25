@@ -114,6 +114,7 @@ function Floor1Gameplay({
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [activeNpc, setActiveNpc] = useState<HearthNpcId | null>(null);
   const [flameOpen, setFlameOpen] = useState(false);
+  const [wallRevealVersion, setWallRevealVersion] = useState(0);
   const gateLabels = area === Area.HEARTH ? HEARTH_GATE_LABELS(state) : [];
 
   // Narrative (design doc section 11) — both one-time-per-save. The intro
@@ -176,7 +177,7 @@ function Floor1Gameplay({
         <pointLight position={[0, 6, 0]} intensity={0.4} color={theme.special} />
 
         <group ref={dungeonGroupRef}>
-          <DungeonRenderer mapData={mapData} theme={theme} />
+          <DungeonRenderer mapData={mapData} theme={theme} revealVersion={wallRevealVersion} />
         </group>
         <Player state={state} input={input} />
         {state.enemies.map((e) => (
@@ -185,7 +186,7 @@ function Floor1Gameplay({
         {state.boss && <Boss state={state} bossState={state.boss} />}
         <BossGateDoor state={state} />
         <Hazards state={state} />
-        <Interactables state={state} input={input} />
+        <Interactables state={state} input={input} onIllusoryWallRevealed={() => setWallRevealVersion((v) => v + 1)} />
         <HearthGates state={state} input={input} onTravel={onAreaChange} />
         <HearthNPCs state={state} input={input} onTalk={setActiveNpc} />
         <FlaviannaEncounter state={state} input={input} onTalk={() => setActiveNpc("flavianna")} />
