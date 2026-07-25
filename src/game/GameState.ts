@@ -279,6 +279,7 @@ export interface GameState {
   vaultLeverPulled: boolean;
   vaultOpened: boolean;
   illusoryWallOpened: boolean;
+  shortcutDoorOpened: boolean;
   hazards: GroundHazard[];
   nextHazardId: number;
   // True while mapData.bossGateDoor should block player movement (see
@@ -472,6 +473,7 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     vaultLeverPulled: false,
     vaultOpened: false,
     illusoryWallOpened: false,
+    shortcutDoorOpened: false,
     hazards: [],
     nextHazardId: 0,
     gateLocked: !!(boss && mapData.bossGateDoor),
@@ -619,6 +621,17 @@ export function openIllusoryWall(state: GameState): boolean {
   grantItem(state, iw.itemId);
   spawnFloatingText(state, "The wall gives way.", new THREE.Vector3(iw.wallX + 0.5, 2, iw.wallY + 0.5), "#9fae9f");
   return true;
+}
+
+// "The Ring" archetype's locked shortcut door — permanently unlocked once
+// opened (no tile-type mutation needed here, unlike the illusory wall: the
+// gate tiles were always real floor, only ever blocked by
+// isShortcutDoorBlocked's runtime check, matching the boss gate door's own
+// "plain floor tile, solid only while a flag says so" treatment).
+export function openShortcutDoor(state: GameState) {
+  if (!state.mapData.shortcutDoorSpawn || state.shortcutDoorOpened) return;
+  state.shortcutDoorOpened = true;
+  spawnFloatingText(state, "The shortcut opens.", state.player.position.clone().add(new THREE.Vector3(0, 2, 0)), "#9fae9f");
 }
 
 // Spawns the fight's starting roster at the lever and marks it triggered —

@@ -23,7 +23,7 @@ import {
   CAST_REFUND_WINDOW_PCT,
   type MeleeAction,
 } from "./gameConstants";
-import { isGateBlocked, resolveCollision } from "./maps/collision";
+import { isGateBlocked, isShortcutDoorBlocked, resolveCollision } from "./maps/collision";
 import type { GameInput } from "./input";
 
 const ATTACK_ARC_COS = Math.cos((70 * Math.PI) / 180); // +/-70 deg frontal cone
@@ -298,8 +298,12 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     }
 
     // Tile-grid collision (walls resolved against the 2D grid, not the 3D mesh) —
-    // the boss gate door additionally blocks passage while the area's boss is alive.
-    resolveCollision(state.mapData, p.position, PLAYER_RADIUS, (tx, ty) => isGateBlocked(state.mapData, state.gateLocked, tx, ty));
+    // the boss gate door additionally blocks passage while the area's boss is
+    // alive, and the Ring archetype's shortcut door blocks its gate tiles
+    // until opened from the far side.
+    resolveCollision(state.mapData, p.position, PLAYER_RADIUS, (tx, ty) =>
+      isGateBlocked(state.mapData, state.gateLocked, tx, ty) || isShortcutDoorBlocked(state.mapData, state.shortcutDoorOpened, tx, ty)
+    );
 
     // Reached the end portal (only ever reachable once the boss gate has
     // unlocked, since the gate physically blocks the path there while the

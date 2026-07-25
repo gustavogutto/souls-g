@@ -21,6 +21,15 @@ export function isGateBlocked(mapData: MapData, gateLocked: boolean, tx: number,
   return tx === mapData.bossGateDoor.x && ty === mapData.bossGateDoor.y;
 }
 
+// "The Ring" archetype's locked shortcut door (see MapData.shortcutDoorSpawn)
+// — same "plain floor tile, solid only while a GameState flag says so"
+// treatment as the boss gate door above, since it also can't be baked into
+// the static tiles array (needs to become permanently open at runtime).
+export function isShortcutDoorBlocked(mapData: MapData, opened: boolean, tx: number, ty: number): boolean {
+  if (opened || !mapData.shortcutDoorSpawn) return false;
+  return mapData.shortcutDoorSpawn.gateTiles.some((t) => t.x === tx && t.y === ty);
+}
+
 // Resolves a circle (radius r, centered at pos) against every overlapping
 // wall cell by pushing it out along the shortest escape vector. Mutates pos.
 // extraBlocked lets a caller treat additional tiles as solid without those

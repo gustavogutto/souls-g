@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh } from "three";
-import { openChest, triggerSecretFight, lootFallenAdventurer, pullVaultLever, openVault, openIllusoryWall, type ChestState, type GameState } from "./GameState";
+import { openChest, triggerSecretFight, lootFallenAdventurer, pullVaultLever, openVault, openIllusoryWall, openShortcutDoor, type ChestState, type GameState } from "./GameState";
 import type { GameInput } from "./input";
 
 const INTERACT_RANGE = 1.4;
@@ -126,6 +126,27 @@ function VaultChest({ state }: { state: GameState }) {
   );
 }
 
+// "The Ring" archetype's locked shortcut door — one solid panel per gate
+// tile (corridor-width wide), visible only while locked. Approaching from
+// the near (first-visit) side has no interact prompt at all, matching
+// design doc section 13's "opens only from the far side" — the proximity
+// check below is keyed to openFromX/openFromY specifically, never the gate
+// tiles themselves.
+function ShortcutDoorPanel({ x, y, state }: { x: number; y: number; state: GameState }) {
+  const meshRef = useRef<Mesh>(null!);
+
+  useFrame(() => {
+    if (meshRef.current) meshRef.current.visible = !state.shortcutDoorOpened;
+  });
+
+  return (
+    <mesh ref={meshRef} position={[x + 0.5, 1.2, y + 0.5]} castShadow>
+      <boxGeometry args={[1, 2.4, 1]} />
+      <meshStandardMaterial color="#4a3a5a" emissive="#2a1a3a" emissiveIntensity={0.3} />
+    </mesh>
+  );
+}
+
 // Chests and the area's secret-fight lever (see utils/secretFights.ts), plus
 // the proximity + "E"/USE-button interaction that opens/triggers them —
 // pulse-consumption follows the same one-shot pattern as Player.tsx's own
@@ -179,6 +200,12 @@ export function Interactables({ state, input, onIllusoryWallRevealed }: { state:
           onIllusoryWallRevealed?.();
         }
       }
+      const sd = state.mapData.shortcutDoorSpawn;
+      if (sd && !state.shortcutDoorOpened) {
+        const dx = sd.openFromX + 0.5 - p.position.x;
+        const dz = sd.openFromY + 0.5 - p.position.z;
+        if (Math.hypot(dx, dz) <= INTERACT_RANGE) openShortcutDoor(state);
+      }
     }
 
     input.actions.current.interact = false;
@@ -200,6 +227,9 @@ export function Interactables({ state, input, onIllusoryWallRevealed }: { state:
           <VaultChest state={state} />
         </>
       )}
+      {state.mapData.shortcutDoorSpawn?.gateTiles.map((t, i) => (
+        <ShortcutDoorPanel key={i} x={t.x} y={t.y} state={state} />
+      ))}
     </group>
   );
 }

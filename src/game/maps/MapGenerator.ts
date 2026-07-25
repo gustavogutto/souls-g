@@ -7,14 +7,12 @@ import { SECRET_FIGHT_BY_AREA } from "../utils/secretFights";
 // near-verbatim (the algorithm has zero engine dependency — only the
 // isometric-sprite rendering step doesn't carry over, and that's replaced by
 // DungeonRenderer.tsx). Deliberately NOT yet ported: the seamless-portal
-// prototype (portals/portalAnchor/layerFlameSpawn), and "The Ring"
-// archetype's shortcut-gate loop corridor (the structural loop bypass
-// corridor itself is also skipped for the same reason — it's a bonus
-// route, not required for start->boss->end connectivity).
-// fallenAdventurerSpawn, merchantNpcSpawn (Flavianna), vaultSpawn (the
-// Mystery Vault), and illusoryWallSpawn are now ported; breakableSpawns
-// (crates) is a new addition scattered on free tiles rather than the 2D
-// source's hand-placed prologue coordinates, since this port's prologue is
+// prototype (portals/portalAnchor/layerFlameSpawn) and its "echo boss"
+// system. fallenAdventurerSpawn, merchantNpcSpawn (Flavianna), vaultSpawn
+// (the Mystery Vault), illusoryWallSpawn, and "The Ring" archetype's
+// shortcut-gate loop corridor are now ported; breakableSpawns (crates) is
+// a new addition scattered on free tiles rather than the 2D source's
+// hand-placed prologue coordinates, since this port's prologue is
 // procedural rather than hand-authored.
 
 export interface TileData {
@@ -73,6 +71,12 @@ export interface MapData {
   // once interacted with from fromX/fromY (see GameState.openIllusoryWall).
   // No telegraph at all — indistinguishable from any other wall until then.
   illusoryWallSpawn?: { wallX: number; wallY: number; fromX: number; fromY: number; revealX: number; revealY: number; itemId: string };
+  // "The Ring" archetype's locked shortcut door (design doc section 13) —
+  // blocks gateTiles until opened, and only openable by approaching from
+  // openFromX/openFromY (the far side, reached via the normal path first).
+  // Not guaranteed every "Ring" floor — see generateLabyrinth's own comment
+  // on why a passing candidate isn't always found.
+  shortcutDoorSpawn?: { gateTiles: { x: number; y: number }[]; openFromX: number; openFromY: number };
   // Hearth-only (see generateHearthMap): one gate per travel destination,
   // rendered/interacted by HearthGates.tsx. Undefined on every normal
   // procedurally-generated floor.
@@ -192,7 +196,13 @@ function generateLabyrinth(
   archetype: FloorArchetype,
   area: Area,
   hasBoss: boolean
-): { map: number[][]; rooms: Room[]; floodTiles: Map<string, 1 | 2>; sortedMain: Room[] } {
+): {
+  map: number[][];
+  rooms: Room[];
+  floodTiles: Map<string, 1 | 2>;
+  sortedMain: Room[];
+  shortcutGate?: { gateTiles: { x: number; y: number }[]; openFromX: number; openFromY: number };
+} {
   const map: number[][] = [];
   for (let y = 0; y < height; y++) {
     map[y] = [];
@@ -338,6 +348,71 @@ function generateLabyrinth(
   // mainPath filter above), so it's already connected.
   if (bossRoom) carveCorridor(bossRoom.center.x, bossRoom.center.y, endRoom.center.x, endRoom.center.y);
 
+  // "The Ring" archetype (design doc section 13) — one extra corridor
+  // bypassing the sequential chain, turning it into an actual loop. The
+  // loop's value is a same-visit backtrack, not a first-playthrough skip:
+  // both endpoints are already main-path rooms visited in normal order, so
+  // the shortcut only pays off after reaching `last` the normal way —
+  // which is exactly what gating the open-prompt to the `last` side
+  // enforces (see GameState.openShortcutDoor). Skipped when there aren't
+  // at least 4 main-path rooms (nothing to bypass around).
+  //
+  // Connectivity is verified by an actual flood-fill with the candidate
+  // gate tiles blocked, over the map as carved so far — a fixed-offset
+  // guess isn't enough (it can land inside `first`/`last`'s own room
+  // rectangles, or on the sequential corridor's shared initial leg, since
+  // this generator never cross-checks corridors against each other
+  // elsewhere either). No passing candidate leaves shortcutGate undefined,
+  // same silent-absence precedent as every other optional spawn here.
+  let shortcutGate: { gateTiles: { x: number; y: number }[]; openFromX: number; openFromY: number } | undefined;
+  if (archetype.loopChance > 0 && Math.random() < archetype.loopChance && sortedMain.length >= 4) {
+    const first = sortedMain[1];
+    const last = sortedMain[sortedMain.length - 2];
+    carveCorridor(first.center.x, first.center.y, last.center.x, last.center.y);
+
+    const finalTarget = (bossRoom ?? sortedMain[sortedMain.length - 1]).center;
+    const cWidth = archetype.corridorWidth;
+    const dir = Math.sign(last.center.x - first.center.x) || 1;
+    const inRoomX = (x: number, room: Room) => x >= room.x && x < room.x + room.w;
+    const staysConnected = (blocked: Set<string>): boolean => {
+      const seen = new Set<string>();
+      const stack: { x: number; y: number }[] = [startRoom.center];
+      while (stack.length) {
+        const p = stack.pop()!;
+        const key = `${p.x},${p.y}`;
+        if (seen.has(key)) continue;
+        if (p.x < 0 || p.y < 0 || p.x >= width || p.y >= height) continue;
+        if (map[p.y][p.x] === 1) continue;
+        if (blocked.has(key)) continue;
+        seen.add(key);
+        stack.push({ x: p.x + 1, y: p.y }, { x: p.x - 1, y: p.y }, { x: p.x, y: p.y + 1 }, { x: p.x, y: p.y - 1 });
+      }
+      return seen.has(`${finalTarget.x},${finalTarget.y}`);
+    };
+    for (let x = first.center.x + dir; x !== last.center.x; x += dir) {
+      const openX = x + dir;
+      if (openX === last.center.x) break;
+      if (inRoomX(x, first) || inRoomX(x, last) || inRoomX(openX, first) || inRoomX(openX, last)) continue;
+      const candidateTiles: { x: number; y: number }[] = [];
+      for (let w = 0; w < cWidth; w++) candidateTiles.push({ x, y: first.center.y + w });
+      // Real bug caught by this port's own verification sweep (not present
+      // in the 2D source's own account, but the same class of issue it
+      // warned about): a candidate row can run off the map edge or land on
+      // a cell the horizontal-leg carve never actually reached, leaving a
+      // "gate tile" that was never real floor. Blocking an already-wall
+      // tile is a no-op for staysConnected below, so it'd pass trivially
+      // without ever gating the real corridor — verify every candidate
+      // tile is genuinely already-carved floor before it's even considered.
+      const allCarved = candidateTiles.every((t) => t.y >= 0 && t.y < height && map[t.y][t.x] === 0);
+      if (!allCarved) continue;
+      const blocked = new Set(candidateTiles.map((t) => `${t.x},${t.y}`));
+      if (staysConnected(blocked)) {
+        shortcutGate = { gateTiles: candidateTiles, openFromX: openX, openFromY: first.center.y };
+        break;
+      }
+    }
+  }
+
   const deadEnds = rooms.filter((r) => r.tag === "dead_end");
   for (const de of deadEnds) {
     let nearest = sortedMain[0];
@@ -352,7 +427,7 @@ function generateLabyrinth(
     carveCorridor(de.center.x, de.center.y, nearest.center.x, nearest.center.y, 2);
   }
 
-  return { map, rooms, floodTiles, sortedMain };
+  return { map, rooms, floodTiles, sortedMain, shortcutGate };
 }
 
 function pickRoomAtPathFraction(sortedMain: Room[], fraction: number): Room {
@@ -410,7 +485,7 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   // every other area is the real "5 floors, boss only on the last" shape.
   const isFinalFloor = area === Area.PROLOGUE || floorIdx === FLOOR_SEQUENCE.length - 1;
 
-  const { map: rawMap, rooms, floodTiles, sortedMain } = generateLabyrinth(width, height, archetype, area, isFinalFloor);
+  const { map: rawMap, rooms, floodTiles, sortedMain, shortcutGate } = generateLabyrinth(width, height, archetype, area, isFinalFloor);
   const tideArea = area === Area.AREA_2;
   const tiles: TileData[] = [];
   const floorTiles: { x: number; y: number }[] = [];
@@ -568,6 +643,11 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   usedTiles.add(`${playerSpawn.x},${playerSpawn.y}`);
   const isFreeTile = (x: number, y: number) => !usedTiles.has(`${x},${y}`) && rawMap[y]?.[x] === 0;
   const markTileUsed = (x: number, y: number) => usedTiles.add(`${x},${y}`);
+
+  if (shortcutGate) {
+    for (const t of shortcutGate.gateTiles) usedTiles.add(`${t.x},${t.y}`);
+    usedTiles.add(`${shortcutGate.openFromX},${shortcutGate.openFromY}`);
+  }
 
   const startFlameOffsets = [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [-1, -1], [1, -1], [-1, 1]] as const;
   const startFlameSpawn = findFreeTileNear(playerSpawn, startFlameOffsets, isFreeTile, markTileUsed);
@@ -749,7 +829,7 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     tiles, width, height, playerSpawn, enemySpawns, chestSpawns, doorSpawns,
     bossSpawn, cellarStairs, endPoint, startPoint, bossGateDoor,
     ashenFlameSpawn, startFlameSpawn, propSpawns, leverSpawn, merchantNpcSpawn,
-    fallenAdventurerSpawn, breakableSpawns, vaultSpawn, illusoryWallSpawn,
+    fallenAdventurerSpawn, breakableSpawns, vaultSpawn, illusoryWallSpawn, shortcutDoorSpawn: shortcutGate,
   };
 }
 
