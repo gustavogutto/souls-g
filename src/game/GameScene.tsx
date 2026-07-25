@@ -28,6 +28,7 @@ import { getAreaTheme } from "./utils/areaThemes";
 import { INTRO_CRAWL_LINES, FLOOR_LORE } from "./utils/loreText";
 import { LoreOverlay } from "./LoreOverlay";
 import { PauseMenu } from "./PauseMenu";
+import { Minimap } from "./Minimap";
 
 const AUTOSAVE_INTERVAL_MS = 5000;
 
@@ -218,6 +219,7 @@ function Floor1Gameplay({
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} look={input.look} />
       </Canvas>
       <HUD state={state} look={input.look} />
+      <Minimap state={state} />
       {gateLabels.length > 0 && (
         <div style={{ position: "absolute", top: 90, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 18, fontFamily: "Georgia, serif", fontSize: 11, color: "#e8e0d4", opacity: 0.75, textShadow: "1px 1px 2px black", pointerEvents: "none" }}>
           {gateLabels.map((g) => (
