@@ -201,10 +201,11 @@ export interface FloatingText {
 export interface ProgressFlags {
   prologueComplete: boolean;
   areaBossDefeated: Partial<Record<Area, boolean>>;
+  flaviannaMet: boolean; // met once in Area 2 floor 3 (merchantNpcSpawn) — from then on she's a Hearth NPC instead
 }
 
 export function createProgressFlags(): ProgressFlags {
-  return { prologueComplete: false, areaBossDefeated: {} };
+  return { prologueComplete: false, areaBossDefeated: {}, flaviannaMet: false };
 }
 
 // Called from both the melee (Player.tsx) and spell (Projectiles.tsx) boss

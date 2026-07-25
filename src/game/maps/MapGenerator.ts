@@ -44,13 +44,19 @@ export interface MapData {
   // normal procedurally-generated room" precedent as ashenFlameSpawn, not a
   // bespoke arena.
   leverSpawn?: { x: number; y: number };
+  // Flavianna — a single one-time in-world encounter, Area 2 / floor index
+  // 2 only (design doc: "found once in Area 2, floor 3"). Optional by
+  // construction: an unlucky room roll with no dead-end rooms just means no
+  // spawn that run, same absence precedent as ashenFlameSpawn/leverSpawn.
+  merchantNpcSpawn?: { x: number; y: number };
   // Hearth-only (see generateHearthMap): one gate per travel destination,
   // rendered/interacted by HearthGates.tsx. Undefined on every normal
   // procedurally-generated floor.
   areaGates?: { x: number; y: number; area: Area; label: string }[];
   // Hearth-only: Martyna (leveling), Varn (shop), the personal item stash,
-  // and The Tide-Refused (dialogue-only wanderer) — see HearthNPCs.tsx.
-  npcs?: { id: "martyna" | "varn" | "stash" | "tide_refused"; x: number; y: number }[];
+  // The Tide-Refused (dialogue-only wanderer), and Flavianna (spell shop,
+  // once met via merchantNpcSpawn) — see HearthNPCs.tsx.
+  npcs?: { id: "martyna" | "varn" | "stash" | "tide_refused" | "flavianna"; x: number; y: number }[];
 }
 
 interface Room {
@@ -581,6 +587,21 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     leverSpawn = findFreeTileNear(leverRoom.center, leverOffsets, isFreeTile, markTileUsed);
   }
 
+  // Flavianna — see MapData.merchantNpcSpawn's comment. Placed in a
+  // dead-end room center (reversed order, same as the 2D source) so she
+  // doesn't sit directly on the critical path.
+  let merchantNpcSpawn: { x: number; y: number } | undefined;
+  if (area === Area.AREA_2 && floorIdx === 2) {
+    const merchantOffsets = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]] as const;
+    for (const room of [...deadEndRooms].reverse()) {
+      const found = findFreeTileNear(room.center, merchantOffsets, isFreeTile, markTileUsed);
+      if (found) {
+        merchantNpcSpawn = found;
+        break;
+      }
+    }
+  }
+
   const doorSpawns: { x: number; y: number }[] = [];
   for (const tile of floorTiles) {
     if (doorSpawns.length >= (areaConfig.numDoors || 4)) break;
@@ -616,7 +637,7 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   return {
     tiles, width, height, playerSpawn, enemySpawns, chestSpawns, doorSpawns,
     bossSpawn, cellarStairs, endPoint, startPoint, bossGateDoor,
-    ashenFlameSpawn, startFlameSpawn, propSpawns, leverSpawn,
+    ashenFlameSpawn, startFlameSpawn, propSpawns, leverSpawn, merchantNpcSpawn,
   };
 }
 
@@ -676,12 +697,14 @@ export function generateHearthMap(): MapData {
   // Varn is at the anvil" first-visit framing. The stash sits right behind
   // spawn (a chest, not a person); The Tide-Refused sits apart near spawn,
   // an outsider rather than a third Order member (per the 2D source's own
-  // framing — "the Order dwindled to two").
-  const npcs: { id: "martyna" | "varn" | "stash" | "tide_refused"; x: number; y: number }[] = [
+  // framing — "the Order dwindled to two"). Flavianna sits further in,
+  // between the NPC row and the travel gates, once met in the field.
+  const npcs: { id: "martyna" | "varn" | "stash" | "tide_refused" | "flavianna"; x: number; y: number }[] = [
     { id: "martyna", x: Math.floor(size / 2) - 4, y: size - 8 },
     { id: "varn", x: Math.floor(size / 2) + 4, y: size - 8 },
     { id: "stash", x: Math.floor(size / 2), y: size - 6 },
     { id: "tide_refused", x: 3, y: size - 4 },
+    { id: "flavianna", x: Math.floor(size / 2), y: size - 11 },
   ];
 
   return {

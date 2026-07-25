@@ -14,7 +14,8 @@ import { Hazards } from "./Hazards";
 import { Interactables } from "./Interactables";
 import { HearthGates, HEARTH_GATE_LABELS } from "./HearthGates";
 import { HearthNPCs, type HearthNpcId } from "./HearthNPCs";
-import { MartynaPanel, VarnPanel, StashPanel, TideRefusedPanel } from "./HearthNPCPanels";
+import { FlaviannaEncounter } from "./FlaviannaEncounter";
+import { MartynaPanel, VarnPanel, StashPanel, TideRefusedPanel, FlaviannaPanel } from "./HearthNPCPanels";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
@@ -137,6 +138,7 @@ function Floor1Gameplay({
         <Interactables state={state} input={input} />
         <HearthGates state={state} input={input} onTravel={onAreaChange} />
         <HearthNPCs state={state} input={input} onTalk={setActiveNpc} />
+        <FlaviannaEncounter state={state} input={input} onTalk={() => setActiveNpc("flavianna")} />
         <EndPortalWatcher
           state={state}
           onReachEnd={() => {
@@ -160,6 +162,7 @@ function Floor1Gameplay({
       <VarnPanel state={state} open={activeNpc === "varn"} onClose={() => setActiveNpc(null)} />
       <StashPanel state={state} open={activeNpc === "stash"} onClose={() => setActiveNpc(null)} />
       <TideRefusedPanel open={activeNpc === "tide_refused"} onClose={() => setActiveNpc(null)} />
+      <FlaviannaPanel state={state} open={activeNpc === "flavianna"} onClose={() => setActiveNpc(null)} />
     </>
   );
 }

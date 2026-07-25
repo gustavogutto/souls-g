@@ -5,16 +5,18 @@ import type { GameInput } from "./input";
 
 const INTERACT_RANGE = 1.6;
 
-export type HearthNpcId = "martyna" | "varn" | "stash" | "tide_refused";
+export type HearthNpcId = "martyna" | "varn" | "stash" | "tide_refused" | "flavianna";
 
 // Design doc section 2's staging rule: Martyna is present the moment the
 // prologue ends, Varn unlocks after Area 1's boss dies, the Tide-Refused
-// wanderer unlocks after Area 2's boss dies. The stash has no staging gate —
-// it's just personal storage, always available.
+// wanderer unlocks after Area 2's boss dies, Flavianna unlocks once met in
+// the field (FlaviannaEncounter.tsx). The stash has no staging gate — it's
+// just personal storage, always available.
 function isNpcVisible(id: HearthNpcId, progress: GameState["progress"]): boolean {
   if (id === "martyna") return progress.prologueComplete;
   if (id === "varn") return !!progress.areaBossDefeated[Area.AREA_1];
   if (id === "tide_refused") return !!progress.areaBossDefeated[Area.AREA_2];
+  if (id === "flavianna") return progress.flaviannaMet;
   return true; // stash
 }
 const NPC_COLOR: Record<HearthNpcId, string> = {
@@ -22,6 +24,7 @@ const NPC_COLOR: Record<HearthNpcId, string> = {
   varn: "#8899aa", // iron-grey — the blacksmith
   tide_refused: "#5a6a5a", // dull, warmthless green-grey — an outsider, not Order-robed
   stash: "#6a4a2c", // worn wood/iron chest
+  flavianna: "#aa44cc", // same violet as her in-world encounter figure
 };
 
 function NPCFigure({ npc }: { npc: { id: HearthNpcId; x: number; y: number } }) {

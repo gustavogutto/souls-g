@@ -344,3 +344,102 @@ export function TideRefusedPanel({ open, onClose }: { open: boolean; onClose: ()
     </PanelFrame>
   );
 }
+
+// Flavianna, the spell shop — design doc section 10: "found once in Area 2,
+// floor 3, then available at the Hearth." One shared panel for both entry
+// paths (in-world FlaviannaEncounter.tsx, and HearthNPCs.tsx once met),
+// branching on progress.flaviannaMet exactly like the 2D source's single
+// FlaviannaScene does.
+const FLAVIANNA_GREETING = [
+  "Another one who didn't drown reading by candlelight. Sit, if the water hasn't reached you yet.",
+  "I don't preach the Order's fire. I just borrowed what it remembers and taught myself to throw it.",
+  "Souls buy the shapes I've worked out. Everything else you'll have to work out yourself.",
+];
+
+const FLAVIANNA_SPELLS: { itemId: string; price: number }[] = [
+  { itemId: "stonefall", price: 800 },
+  { itemId: "moonfrost_lance", price: 800 },
+  { itemId: "rotbloom", price: 800 },
+  { itemId: "terra_sigil", price: 800 },
+  { itemId: "comets_end", price: 2500 },
+];
+
+export function FlaviannaPanel({ state, open, onClose }: { state: GameState; open: boolean; onClose: () => void }) {
+  const [, setVersion] = useState(0);
+  const refresh = () => setVersion((v) => v + 1);
+  const [lineIndex, setLineIndex] = useState(0);
+
+  useEffect(() => {
+    state.paused = open;
+    if (open && document.pointerLockElement) document.exitPointerLock();
+  }, [open, state]);
+
+  useEffect(() => {
+    if (!open) setLineIndex(0);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  const p = state.player;
+
+  if (!state.progress.flaviannaMet) {
+    const advance = () => {
+      if (lineIndex + 1 >= FLAVIANNA_GREETING.length) {
+        state.progress.flaviannaMet = true;
+        onClose();
+      } else {
+        setLineIndex((i) => i + 1);
+      }
+    };
+    return (
+      <PanelFrame title="FLAVIANNA, THE UNSWORN" subtitle="a stranger" tagline="" onClose={onClose}>
+        <p style={{ fontSize: 13, lineHeight: 1.6, minHeight: 60, cursor: "pointer" }} onClick={advance}>
+          {FLAVIANNA_GREETING[lineIndex]}
+        </p>
+        <div style={{ fontSize: 10, opacity: 0.5 }}>Click to continue</div>
+      </PanelFrame>
+    );
+  }
+
+  const buySpell = (itemId: string, price: number) => {
+    if (p.stats.souls < price || p.inventory.includes(itemId)) return;
+    p.stats.souls -= price;
+    p.inventory.push(itemId);
+    refresh();
+  };
+
+  return (
+    <PanelFrame title="FLAVIANNA, THE UNSWORN" subtitle={`${p.stats.souls.toLocaleString()} souls`} tagline="I don't preach the Order's fire. I just borrowed what it remembers." onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {FLAVIANNA_SPELLS.map(({ itemId, price }) => {
+          const def = getItemDef(itemId);
+          const owned = p.inventory.includes(itemId);
+          const enabled = !owned && p.stats.souls >= price;
+          return (
+            <div key={itemId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #aa44cc55", borderRadius: 4, padding: "6px 10px" }}>
+              <div>
+                <span style={{ color: "#ffd700", fontSize: 13 }}>{def.name}</span>
+                <div style={{ fontSize: 10, opacity: 0.6 }}>{owned ? "Already owned" : `${price.toLocaleString()} souls`}</div>
+              </div>
+              <button
+                disabled={!enabled}
+                onClick={() => buySpell(itemId, price)}
+                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 3, border: "1px solid #aa44cc", background: "rgba(170,68,204,0.15)", color: "#e8e0d4", cursor: "pointer", opacity: enabled ? 1 : 0.4 }}
+              >
+                {owned ? "Owned" : "Buy"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </PanelFrame>
+  );
+}
