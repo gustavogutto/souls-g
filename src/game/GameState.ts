@@ -226,6 +226,8 @@ export interface GameState {
   boss?: BossState;
   chests: ChestState[];
   secretFight?: SecretFightState;
+  fallenAdventurerLooted: boolean;
+  brokenCrates: Set<string>; // `${x},${y}` keys into mapData.breakableSpawns
   hazards: GroundHazard[];
   nextHazardId: number;
   // True while mapData.bossGateDoor should block player movement (see
@@ -414,6 +416,8 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     boss,
     chests,
     secretFight,
+    fallenAdventurerLooted: false,
+    brokenCrates: new Set(),
     hazards: [],
     nextHazardId: 0,
     gateLocked: !!(boss && mapData.bossGateDoor),
@@ -481,6 +485,28 @@ export function openChest(state: GameState, chest: ChestState) {
   if (chest.opened) return;
   chest.opened = true;
   grantItem(state, chest.itemId);
+}
+
+// Design doc section 13's fallen adventurer — one guaranteed item plus a
+// line of flavor text, pure environmental storytelling.
+export function lootFallenAdventurer(state: GameState) {
+  const fa = state.mapData.fallenAdventurerSpawn;
+  if (!fa || state.fallenAdventurerLooted) return;
+  state.fallenAdventurerLooted = true;
+  grantItem(state, fa.itemId);
+  spawnFloatingText(state, fa.flavorText, new THREE.Vector3(fa.x + 0.5, 2.6, fa.y + 0.5), "#9fae9f");
+}
+
+// Design doc section 13's breakable crates — a small souls trickle, no
+// hp/hit-stop machinery needed for a static prop (2D source precedent:
+// 3-8 souls).
+export function breakCrate(state: GameState, x: number, y: number) {
+  const key = `${x},${y}`;
+  if (state.brokenCrates.has(key)) return;
+  state.brokenCrates.add(key);
+  const souls = 3 + Math.floor(Math.random() * 6);
+  state.player.stats.souls += souls;
+  spawnFloatingText(state, `+${souls}`, new THREE.Vector3(x + 0.5, 1.6, y + 0.5), "#ffd700");
 }
 
 // Spawns the fight's starting roster at the lever and marks it triggered —

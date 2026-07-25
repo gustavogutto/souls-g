@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh } from "three";
-import { openChest, triggerSecretFight, type ChestState, type GameState } from "./GameState";
+import { openChest, triggerSecretFight, lootFallenAdventurer, type ChestState, type GameState } from "./GameState";
 import type { GameInput } from "./input";
 
 const INTERACT_RANGE = 1.4;
@@ -21,6 +21,41 @@ function Chest({ chest }: { chest: ChestState }) {
     <mesh ref={meshRef} position={[chest.x + 0.5, 0.35, chest.y + 0.5]} castShadow>
       <boxGeometry args={[0.7, 0.7, 0.7]} />
       <meshStandardMaterial color="#c9a84c" emissive="#553311" emissiveIntensity={0.3} />
+    </mesh>
+  );
+}
+
+function FallenAdventurer({ state }: { state: GameState }) {
+  const meshRef = useRef<Mesh>(null!);
+
+  useFrame(() => {
+    if (meshRef.current) meshRef.current.visible = !state.fallenAdventurerLooted;
+  });
+
+  const fa = state.mapData.fallenAdventurerSpawn!;
+  return (
+    <mesh ref={meshRef} position={[fa.x + 0.5, 0.12, fa.y + 0.5]} rotation={[0, Math.random() * Math.PI, 0]} castShadow>
+      <boxGeometry args={[1.1, 0.24, 0.4]} />
+      <meshStandardMaterial color="#4a4238" />
+    </mesh>
+  );
+}
+
+// Broken crates just vanish (their souls trickle is instant, no lingering
+// visual payoff worth animating) — see Player.tsx's melee-hit resolution
+// for where breakCrate() actually gets called.
+function Crate({ state, x, y }: { state: GameState; x: number; y: number }) {
+  const meshRef = useRef<Mesh>(null!);
+  const key = `${x},${y}`;
+
+  useFrame(() => {
+    if (meshRef.current) meshRef.current.visible = !state.brokenCrates.has(key);
+  });
+
+  return (
+    <mesh ref={meshRef} position={[x + 0.5, 0.3, y + 0.5]} castShadow>
+      <boxGeometry args={[0.55, 0.55, 0.55]} />
+      <meshStandardMaterial color="#8a6a3a" />
     </mesh>
   );
 }
@@ -68,6 +103,12 @@ export function Interactables({ state, input }: { state: GameState; input: GameI
         const dz = sf.leverY + 0.5 - p.position.z;
         if (Math.hypot(dx, dz) <= INTERACT_RANGE) triggerSecretFight(state);
       }
+      const fa = state.mapData.fallenAdventurerSpawn;
+      if (fa && !state.fallenAdventurerLooted) {
+        const dx = fa.x + 0.5 - p.position.x;
+        const dz = fa.y + 0.5 - p.position.z;
+        if (Math.hypot(dx, dz) <= INTERACT_RANGE) lootFallenAdventurer(state);
+      }
     }
 
     input.actions.current.interact = false;
@@ -77,6 +118,10 @@ export function Interactables({ state, input }: { state: GameState; input: GameI
     <group>
       {state.chests.map((c, i) => (
         <Chest key={i} chest={c} />
+      ))}
+      {state.mapData.fallenAdventurerSpawn && <FallenAdventurer state={state} />}
+      {state.mapData.breakableSpawns?.map((b, i) => (
+        <Crate key={i} state={state} x={b.x} y={b.y} />
       ))}
       {state.secretFight && <Lever state={state} />}
     </group>

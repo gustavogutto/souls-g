@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile, markBossDefeated, tickChill, chillSlowMultiplier, updateStatusEffects } from "./GameState";
+import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile, markBossDefeated, tickChill, chillSlowMultiplier, updateStatusEffects, breakCrate } from "./GameState";
 import { computeWeaponDamage, computeSpellDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { CINDER_WRETCH_DETONATE_RADIUS, CINDER_WRETCH_DETONATE_DAMAGE_MULT } from "./utils/enemyRoles";
 import { STAMINA_REGEN_PER_SEC } from "./utils/constants";
@@ -261,6 +261,14 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
             }
           }
         }
+      }
+
+      // Breakable crates (design doc section 13) — plain distance check, no
+      // facing-arc requirement, matching the 2D source exactly.
+      for (const b of state.mapData.breakableSpawns ?? []) {
+        const key = `${b.x},${b.y}`;
+        if (state.brokenCrates.has(key)) continue;
+        if (Math.hypot(b.x + 0.5 - p.position.x, b.y + 0.5 - p.position.z) < config.range) breakCrate(state, b.x, b.y);
       }
 
       p.attackHitApplied = true;

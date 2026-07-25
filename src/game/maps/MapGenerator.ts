@@ -6,15 +6,16 @@ import { SECRET_FIGHT_BY_AREA } from "../utils/secretFights";
 // flood-tile algorithm and the "normal floor" spawn fields are ported
 // near-verbatim (the algorithm has zero engine dependency — only the
 // isometric-sprite rendering step doesn't carry over, and that's replaced by
-// DungeonRenderer.tsx). Deliberately NOT yet ported (phase 7 of the 3D
-// conversion plan): the 5 named secret/lever fights (vaultSpawn,
-// towerKnightSpawn, shackledSentinelSpawn, undertowSpawn, voidboundSpawn,
-// gargoyleWardenSpawn), illusoryWallSpawn, fallenAdventurerSpawn,
-// merchantNpcSpawn, the seamless-portal prototype (portals/portalAnchor/
-// layerFlameSpawn), and "The Ring" archetype's shortcut-gate loop corridor
-// (the structural loop bypass corridor itself is also skipped for the same
-// reason — it's a bonus route, not required for start->boss->end
-// connectivity).
+// DungeonRenderer.tsx). Deliberately NOT yet ported: vaultSpawn (the Mystery
+// Vault gamble chest) and illusoryWallSpawn, the seamless-portal prototype
+// (portals/portalAnchor/layerFlameSpawn), and "The Ring" archetype's
+// shortcut-gate loop corridor (the structural loop bypass corridor itself
+// is also skipped for the same reason — it's a bonus route, not required
+// for start->boss->end connectivity). fallenAdventurerSpawn and
+// merchantNpcSpawn (Flavianna) are now ported; breakableSpawns (crates) is
+// a new addition scattered on free tiles rather than the 2D source's
+// hand-placed prologue coordinates, since this port's prologue is
+// procedural rather than hand-authored.
 
 export interface TileData {
   x: number;
@@ -44,6 +45,16 @@ export interface MapData {
   // normal procedurally-generated room" precedent as ashenFlameSpawn, not a
   // bespoke arena.
   leverSpawn?: { x: number; y: number };
+  // A themed one-shot loot prop on a free floor tile — design doc section
+  // 13's "fallen adventurer loot," pure environmental storytelling. One per
+  // floor, any area (2D source precedent: not area/floor-restricted).
+  fallenAdventurerSpawn?: { x: number; y: number; itemId: string; flavorText: string };
+  // Design doc section 13: "currently prologue-only in the 2D source"
+  // (scoped down from an original "one themed breakable prop per area"
+  // plan) — melee range breaks them for a small souls reward, non-blocking,
+  // never gates walkability. Only ever populated for Area.PROLOGUE here,
+  // matching that precedent exactly.
+  breakableSpawns?: { x: number; y: number }[];
   // Flavianna — a single one-time in-world encounter, Area 2 / floor index
   // 2 only (design doc: "found once in Area 2, floor 3"). Optional by
   // construction: an unlucky room roll with no dead-end rooms just means no
@@ -153,6 +164,14 @@ function randInt(min: number, max: number): number {
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
+
+// Fallen Adventurer flavor lines — ported verbatim from the 2D source.
+const FALLEN_ADVENTURER_FLAVOR = [
+  "They made it further than most. Not far enough.",
+  "Whatever they were running from, it caught up here.",
+  "One hand still reaches toward the way out.",
+  "No name left on them. The mountain took that too.",
+];
 
 function generateLabyrinth(
   width: number,
@@ -569,6 +588,39 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     }
   }
 
+  // Fallen adventurer loot — a themed one-shot prop on any free floor tile,
+  // same shape as the propSpawns scatter below.
+  let fallenAdventurerSpawn: MapData["fallenAdventurerSpawn"];
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const tile = floorTiles[Math.floor(Math.random() * floorTiles.length)];
+    const key = `${tile.x},${tile.y}`;
+    if (usedTiles.has(key)) continue;
+    usedTiles.add(key);
+    fallenAdventurerSpawn = {
+      x: tile.x,
+      y: tile.y,
+      itemId: getNextChestItem(),
+      flavorText: FALLEN_ADVENTURER_FLAVOR[Math.floor(Math.random() * FALLEN_ADVENTURER_FLAVOR.length)],
+    };
+    break;
+  }
+
+  // Breakable crates — prologue-only (design doc section 13's scoped-down
+  // precedent), scattered on free floor tiles rather than the 2D source's
+  // hand-placed corridor coordinates, since this port's prologue is
+  // procedural rather than hand-authored.
+  let breakableSpawns: { x: number; y: number }[] | undefined;
+  if (area === Area.PROLOGUE) {
+    breakableSpawns = [];
+    for (let attempt = 0; attempt < 40 && breakableSpawns.length < 6; attempt++) {
+      const tile = floorTiles[Math.floor(Math.random() * floorTiles.length)];
+      const key = `${tile.x},${tile.y}`;
+      if (usedTiles.has(key)) continue;
+      usedTiles.add(key);
+      breakableSpawns.push({ x: tile.x, y: tile.y });
+    }
+  }
+
   const flameFraction = archetype.name === "Gauntlet" ? 0.9 : 0.4 + Math.random() * 0.2;
   const flameRoom = pickRoomAtPathFraction(sortedMain, flameFraction);
   const flameOffsets = [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [-1, 1], [1, -1], [-1, -1], [3, 0], [0, 3]] as const;
@@ -638,6 +690,7 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     tiles, width, height, playerSpawn, enemySpawns, chestSpawns, doorSpawns,
     bossSpawn, cellarStairs, endPoint, startPoint, bossGateDoor,
     ashenFlameSpawn, startFlameSpawn, propSpawns, leverSpawn, merchantNpcSpawn,
+    fallenAdventurerSpawn, breakableSpawns,
   };
 }
 
