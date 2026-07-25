@@ -48,8 +48,9 @@ export interface MapData {
   // rendered/interacted by HearthGates.tsx. Undefined on every normal
   // procedurally-generated floor.
   areaGates?: { x: number; y: number; area: Area; label: string }[];
-  // Hearth-only: Martyna (leveling) and Varn (shop) — see HearthNPCs.tsx.
-  npcs?: { id: "martyna" | "varn"; x: number; y: number }[];
+  // Hearth-only: Martyna (leveling), Varn (shop), the personal item stash,
+  // and The Tide-Refused (dialogue-only wanderer) — see HearthNPCs.tsx.
+  npcs?: { id: "martyna" | "varn" | "stash" | "tide_refused"; x: number; y: number }[];
 }
 
 interface Room {
@@ -672,10 +673,15 @@ export function generateHearthMap(): MapData {
   const areaGates = HEARTH_GATES.map((g) => ({ x: g.x, y: 3, area: g.area, label: g.label }));
   // Flanking the spawn, between it and the gates — the first thing a new
   // arrival sees, matching the design doc's "Martyna greets the player,
-  // Varn is at the anvil" first-visit framing.
-  const npcs: { id: "martyna" | "varn"; x: number; y: number }[] = [
+  // Varn is at the anvil" first-visit framing. The stash sits right behind
+  // spawn (a chest, not a person); The Tide-Refused sits apart near spawn,
+  // an outsider rather than a third Order member (per the 2D source's own
+  // framing — "the Order dwindled to two").
+  const npcs: { id: "martyna" | "varn" | "stash" | "tide_refused"; x: number; y: number }[] = [
     { id: "martyna", x: Math.floor(size / 2) - 4, y: size - 8 },
     { id: "varn", x: Math.floor(size / 2) + 4, y: size - 8 },
+    { id: "stash", x: Math.floor(size / 2), y: size - 6 },
+    { id: "tide_refused", x: 3, y: size - 4 },
   ];
 
   return {

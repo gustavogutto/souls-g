@@ -13,6 +13,7 @@ export interface PlayerState {
   equipped: Partial<Record<ItemSlot, string>>;
   upgrades: ItemUpgrades;
   inventory: string[]; // flat carried-item ids, same no-instance-identity model as the source game
+  stash: string[]; // Hearth personal storage — same flat-list shape as inventory, deposit/withdraw only
   position: THREE.Vector3;
   facing: number; // radians in the XZ plane, 0 = +Z (south)
   hp: number;
@@ -258,6 +259,7 @@ export function createPlayerState(spawn: { x: number; y: number }): PlayerState 
     // Temporary starter items so the equip-only inventory panel (phase 4)
     // has something to show before chests grant real loot (phase 5).
     inventory: ["chainmail_armor", "fallen_knight_helm", "leather_pants", "wanderers_ring", "travelers_pendant"],
+    stash: [],
     position: new THREE.Vector3(spawn.x + 0.5, 0, spawn.y + 0.5),
     facing: 0,
     hp: maxHp,
@@ -451,6 +453,27 @@ export function grantItem(state: GameState, itemId: string) {
   p.inventory.push(itemId);
   const color = `#${(RARITY_COLOR[def.rarity] ?? RARITY_COLOR.common).toString(16).padStart(6, "0")}`;
   spawnFloatingText(state, def.name, textPos, color);
+}
+
+// Hearth stash — deposit/withdraw between inventory and stash, both flat
+// uncapped string[] with no instance identity (2D source precedent). Won't
+// deposit an item's only copy if it's the one currently equipped, since
+// p.equipped would be left pointing at an id no longer in inventory.
+export function depositItem(p: PlayerState, itemId: string) {
+  const idx = p.inventory.indexOf(itemId);
+  if (idx < 0) return;
+  const equippedIds = new Set(Object.values(p.equipped));
+  const remainingCopies = p.inventory.filter((id) => id === itemId).length;
+  if (remainingCopies <= 1 && equippedIds.has(itemId)) return;
+  p.inventory.splice(idx, 1);
+  p.stash.push(itemId);
+}
+
+export function withdrawItem(p: PlayerState, itemId: string) {
+  const idx = p.stash.indexOf(itemId);
+  if (idx < 0) return;
+  p.stash.splice(idx, 1);
+  p.inventory.push(itemId);
 }
 
 export function openChest(state: GameState, chest: ChestState) {

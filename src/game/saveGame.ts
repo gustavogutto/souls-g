@@ -15,7 +15,7 @@ import type { GameState, ProgressFlags } from "./GameState";
 // area+floor rather than resuming the exact same one. Full floor-state
 // persistence is a separate, not-yet-built gap.
 const SAVE_KEY = "echoes_hohenberg_3d_save_v1";
-const SCHEMA_VERSION = 3; // v3 adds `floor` (5-floors-per-area progression)
+const SCHEMA_VERSION = 4; // v4 adds `stash` (Hearth personal storage)
 
 export interface SaveData {
   schemaVersion: number;
@@ -27,6 +27,7 @@ export interface SaveData {
   hp: number;
   flaskCharges: number;
   progress: ProgressFlags;
+  stash: string[];
 }
 
 export function saveGame(state: GameState) {
@@ -41,6 +42,7 @@ export function saveGame(state: GameState) {
     hp: p.hp,
     flaskCharges: p.flaskCharges,
     progress: state.progress,
+    stash: p.stash,
   };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -93,4 +95,5 @@ export function applySaveData(state: GameState, data: SaveData) {
   p.hp = Math.min(data.hp, p.maxHp);
   p.maxStamina = getMaxStamina(p.stats.endurance);
   p.flaskCharges = Math.min(data.flaskCharges, p.maxFlaskCharges);
+  p.stash = [...data.stash];
 }

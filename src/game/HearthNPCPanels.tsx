@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { GameState } from "./GameState";
-import { grantItem } from "./GameState";
+import { grantItem, depositItem, withdrawItem } from "./GameState";
 import { STAT_METADATA, NO_EFFECT_STATS, getSoulsForLevel, getSoulsForItemUpgrade, ITEM_UPGRADE_MAX_LEVEL } from "./utils/constants";
 import { getItemDef, RARITY_COLOR, RARITY_SELL_VALUE, RARITY_BUY_VALUE, SLOT_LABEL, type ItemSlot } from "./utils/items";
 import { getEffectiveMaxHP } from "./utils/equipment";
@@ -219,6 +219,128 @@ export function VarnPanel({ state, open, onClose }: { state: GameState; open: bo
           Buy {flaskShardPrice}
         </button>
       </div>
+    </PanelFrame>
+  );
+}
+
+function ownedEntries(source: string[]): { itemId: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const id of source) counts.set(id, (counts.get(id) ?? 0) + 1);
+  return Array.from(counts.entries()).map(([itemId, count]) => ({ itemId, count }));
+}
+
+// The personal stash — deposit/withdraw between inventory and stash (design
+// doc section 10). No combat relevance, purely decluttering; no cap on
+// either side, matching the 2D source's StashScene.
+export function StashPanel({ state, open, onClose }: { state: GameState; open: boolean; onClose: () => void }) {
+  const [, setVersion] = useState(0);
+  const refresh = () => setVersion((v) => v + 1);
+
+  useEffect(() => {
+    state.paused = open;
+    if (open && document.pointerLockElement) document.exitPointerLock();
+  }, [open, state]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  const p = state.player;
+  const equippedIds = new Set(Object.values(p.equipped));
+
+  return (
+    <PanelFrame title="THE STASH" subtitle={`${p.stash.length} stored`} tagline="A chest for what you're not carrying today." onClose={onClose}>
+      <div style={{ fontSize: 13, letterSpacing: 1, opacity: 0.7, marginBottom: 8 }}>INVENTORY ({p.inventory.length})</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18, maxHeight: 180, overflowY: "auto" }}>
+        {ownedEntries(p.inventory).length === 0 && <div style={{ fontSize: 12, opacity: 0.5 }}>Nothing carried right now.</div>}
+        {ownedEntries(p.inventory).map(({ itemId, count }) => {
+          const def = getItemDef(itemId);
+          const onlyCopyEquipped = count === 1 && equippedIds.has(itemId);
+          return (
+            <div key={itemId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${rarityCss(RARITY_COLOR[def.rarity])}`, borderRadius: 4, padding: "6px 10px" }}>
+              <div>
+                <span style={{ color: rarityCss(RARITY_COLOR[def.rarity]), fontSize: 13 }}>{def.name} x{count}</span>
+                <div style={{ fontSize: 10, opacity: 0.6 }}>{onlyCopyEquipped ? "Equipped — unequip first" : "Tap to deposit"}</div>
+              </div>
+              <button
+                disabled={onlyCopyEquipped}
+                onClick={() => { depositItem(p, itemId); refresh(); }}
+                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 3, border: "1px solid #c9a84c", background: "rgba(201,168,76,0.15)", color: "#e8e0d4", cursor: "pointer", opacity: onlyCopyEquipped ? 0.4 : 1 }}
+              >
+                Deposit
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 13, letterSpacing: 1, opacity: 0.7, marginBottom: 8 }}>STASH ({p.stash.length})</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto" }}>
+        {ownedEntries(p.stash).length === 0 && <div style={{ fontSize: 12, opacity: 0.5 }}>Stash is empty.</div>}
+        {ownedEntries(p.stash).map(({ itemId, count }) => {
+          const def = getItemDef(itemId);
+          return (
+            <div key={itemId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${rarityCss(RARITY_COLOR[def.rarity])}`, borderRadius: 4, padding: "6px 10px" }}>
+              <div>
+                <span style={{ color: rarityCss(RARITY_COLOR[def.rarity]), fontSize: 13 }}>{def.name} x{count}</span>
+                <div style={{ fontSize: 10, opacity: 0.6 }}>Tap to withdraw</div>
+              </div>
+              <button
+                onClick={() => { withdrawItem(p, itemId); refresh(); }}
+                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 3, border: "1px solid #8adbb4", background: "rgba(138,219,180,0.12)", color: "#e8e0d4", cursor: "pointer" }}
+              >
+                Withdraw
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </PanelFrame>
+  );
+}
+
+// The Tide-Refused — dialogue-only wanderer, no mechanical function. Lines
+// ported verbatim from the 2D source's WandererScene.ts.
+const TIDE_REFUSED_LINES = [
+  "You again. Still climbing, then.",
+  "I washed up same as you. Nameless, cold, refused by the water. I just... didn't keep walking.",
+  "Down there the flood forgets you kindly. Up there, I don't know what it does. Maybe that's why you go.",
+  "Warm enough by the fire. That's enough for me.",
+];
+
+export function TideRefusedPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [lineIndex, setLineIndex] = useState(0);
+
+  useEffect(() => {
+    if (open && document.pointerLockElement) document.exitPointerLock();
+    if (!open) setLineIndex(0);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <PanelFrame title="THE TIDE-REFUSED" subtitle="a wanderer" tagline="" onClose={onClose}>
+      <p
+        style={{ fontSize: 13, lineHeight: 1.6, minHeight: 60, cursor: "pointer" }}
+        onClick={() => setLineIndex((i) => (i + 1) % TIDE_REFUSED_LINES.length)}
+      >
+        {TIDE_REFUSED_LINES[lineIndex]}
+      </p>
+      <div style={{ fontSize: 10, opacity: 0.5 }}>Click to continue</div>
     </PanelFrame>
   );
 }

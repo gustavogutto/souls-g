@@ -13,8 +13,8 @@ import { Boss } from "./Boss";
 import { Hazards } from "./Hazards";
 import { Interactables } from "./Interactables";
 import { HearthGates, HEARTH_GATE_LABELS } from "./HearthGates";
-import { HearthNPCs } from "./HearthNPCs";
-import { MartynaPanel, VarnPanel } from "./HearthNPCPanels";
+import { HearthNPCs, type HearthNpcId } from "./HearthNPCs";
+import { MartynaPanel, VarnPanel, StashPanel, TideRefusedPanel } from "./HearthNPCPanels";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
@@ -102,7 +102,7 @@ function Floor1Gameplay({
   const isFinalFloor = !isMultiFloorArea(area) || floorIdx === FLOOR_SEQUENCE.length - 1;
   const input = useGameInput();
   const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [activeNpc, setActiveNpc] = useState<"martyna" | "varn" | null>(null);
+  const [activeNpc, setActiveNpc] = useState<HearthNpcId | null>(null);
   const gateLabels = area === Area.HEARTH ? HEARTH_GATE_LABELS(state) : [];
 
   useEffect(() => {
@@ -158,6 +158,8 @@ function Floor1Gameplay({
       <InventoryPanel state={state} open={inventoryOpen} setOpen={setInventoryOpen} />
       <MartynaPanel state={state} open={activeNpc === "martyna"} onClose={() => setActiveNpc(null)} />
       <VarnPanel state={state} open={activeNpc === "varn"} onClose={() => setActiveNpc(null)} />
+      <StashPanel state={state} open={activeNpc === "stash"} onClose={() => setActiveNpc(null)} />
+      <TideRefusedPanel open={activeNpc === "tide_refused"} onClose={() => setActiveNpc(null)} />
     </>
   );
 }
