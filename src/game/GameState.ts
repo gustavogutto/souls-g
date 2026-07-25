@@ -36,6 +36,7 @@ export interface PlayerState {
   activeMelee: MeleeAction | null; // which swing is currently resolving (light/heavy/bash)
   hitFlashMs: number;
   dead: boolean;
+  deathElapsedMs: number; // ticked while dead; Player.tsx auto-respawns past RESPAWN_DELAY_MS
   flaskCharges: number;
   maxFlaskCharges: number;
   lastHealAtMs: number; // performance.now() timestamp, read by the Tidewarden's heal-punish grab trigger
@@ -411,6 +412,7 @@ export function createPlayerState(spawn: { x: number; y: number }): PlayerState 
     activeMelee: null,
     hitFlashMs: 0,
     dead: false,
+    deathElapsedMs: 0,
     flaskCharges: FLASK_START_CHARGES,
     maxFlaskCharges: FLASK_START_CHARGES,
     lastHealAtMs: -Infinity,
@@ -893,6 +895,29 @@ export function killPlayer(state: GameState) {
     spawnFloatingText(state, "Your souls are lost to the flood", state.player.position.clone().add(new THREE.Vector3(0, 2.5, 0)), "#b04434");
     state.player.stats.souls = 0;
   }
+}
+
+// Auto-respawn (Player.tsx ticks state.player.deathElapsedMs and calls this
+// once it passes RESPAWN_DELAY_MS) — drops the player back at this floor's
+// own checkpoint (its start-of-floor flame if it has one, otherwise the
+// floor's spawn point) and fully restores them, matching the "die, wake up
+// at the last flame" loop every Souls game runs on. No cross-area/floor
+// travel here (unlike FlamePanel's TRAVEL) — same reasoning as killPlayer's
+// own comment: floor layouts aren't seeded, so there is no stable "last
+// rested flame" position to travel back to once you've left the floor it
+// was generated on.
+export function respawnAtCheckpoint(state: GameState) {
+  const p = state.player;
+  const spot = state.mapData.startFlameSpawn ?? state.mapData.playerSpawn;
+  p.position.set(spot.x + 0.5, 0, spot.y + 0.5);
+  p.dead = false;
+  p.deathElapsedMs = 0;
+  p.casting = false;
+  p.rolling = false;
+  p.blocking = false;
+  p.attackActiveMs = 0;
+  p.activeMelee = null;
+  restAtFlame(state);
 }
 
 export function spawnFloatingText(state: GameState, text: string, position: THREE.Vector3, color: string) {

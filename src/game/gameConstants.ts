@@ -12,9 +12,20 @@ export interface MeleeAction {
   stunMs?: number; // forces the enemy into a vulnerable, non-acting state
 }
 
-export const LIGHT_ATTACK: MeleeAction = { damageMultiplier: 1, staminaCost: 12, cooldownMs: 400, range: 1.1 };
-export const HEAVY_ATTACK: MeleeAction = { damageMultiplier: 1.8, staminaCost: 26, cooldownMs: 900, range: 1.2 };
-export const SHIELD_BASH: MeleeAction = { damageMultiplier: 0.3, staminaCost: 20, cooldownMs: 650, range: 1.3, knockback: 2.5, stunMs: 1200 };
+export const LIGHT_ATTACK: MeleeAction = { damageMultiplier: 1, staminaCost: 12, cooldownMs: 400, range: 1.4 };
+export const HEAVY_ATTACK: MeleeAction = { damageMultiplier: 1.8, staminaCost: 26, cooldownMs: 900, range: 1.5 };
+export const SHIELD_BASH: MeleeAction = { damageMultiplier: 0.3, staminaCost: 20, cooldownMs: 650, range: 1.6, knockback: 2.5, stunMs: 1200 };
+
+// The swing's hit check used to resolve instantly on the same frame the
+// attack button was pressed — a pure hit-scan with zero travel time, which
+// combined with facing being decoupled from camera aim (see Player.tsx's
+// facing fix) made melee feel like swinging at nothing even when it visually
+// should've connected. ATTACK_HIT_DELAY_MS defers the check partway through
+// the swing instead, and MELEE_LUNGE_DISTANCE nudges the player a step
+// toward their facing at swing-start so borderline range no longer whiffs.
+export const ATTACK_ACTIVE_MS = 150;
+export const ATTACK_HIT_DELAY_MS = 70;
+export const MELEE_LUNGE_DISTANCE = 0.4;
 
 export const ROLL_DISTANCE = 2.0;
 export const ROLL_DURATION_MS = 400;
@@ -51,3 +62,8 @@ export const CAST_REFUND_WINDOW_PCT = 0.4;
 // same gate the roll i-frame check already used) and slows movement while held.
 export const BLOCK_DAMAGE_REDUCTION = 0.75;
 export const BLOCK_MOVE_SPEED_MULT = 0.5;
+
+// How long the "YOU DIED" screen holds before auto-respawning at the
+// floor's checkpoint (see GameState.respawnAtCheckpoint) — no button, no
+// manual refresh, matching every Souls game's own death loop.
+export const RESPAWN_DELAY_MS = 2600;

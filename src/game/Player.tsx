@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile, handleBossDefeatReward, tickChill, chillSlowMultiplier, updateStatusEffects, breakCrate, toggleLockOn, clearLockOnIfInvalid, getLockOnTargetPosition } from "./GameState";
+import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, respawnAtCheckpoint, spawnProjectile, handleBossDefeatReward, tickChill, chillSlowMultiplier, updateStatusEffects, breakCrate, toggleLockOn, clearLockOnIfInvalid, getLockOnTargetPosition } from "./GameState";
 import { computeWeaponDamage, computeSpellDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { CINDER_WRETCH_DETONATE_RADIUS, CINDER_WRETCH_DETONATE_DAMAGE_MULT } from "./utils/enemyRoles";
 import { STAMINA_REGEN_PER_SEC } from "./utils/constants";
@@ -22,6 +22,10 @@ import {
   CAST_MOVE_SPEED_MULT,
   CAST_REFUND_WINDOW_PCT,
   BLOCK_MOVE_SPEED_MULT,
+  ATTACK_ACTIVE_MS,
+  ATTACK_HIT_DELAY_MS,
+  MELEE_LUNGE_DISTANCE,
+  RESPAWN_DELAY_MS,
   type MeleeAction,
 } from "./gameConstants";
 import { isGateBlocked, isShortcutDoorBlocked, resolveCollision } from "./maps/collision";
@@ -38,7 +42,12 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
 
   useFrame((_, dt) => {
     const p = state.player;
-    if (p.dead || state.paused) return;
+    if (state.paused) return;
+    if (p.dead) {
+      p.deathElapsedMs += dt * 1000;
+      if (p.deathElapsedMs >= RESPAWN_DELAY_MS) respawnAtCheckpoint(state);
+      return;
+    }
     const dtMs = dt * 1000;
     const axes = input.axes.current;
     const actions = input.actions.current;
@@ -161,17 +170,22 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         p.position.z += moveZ * speed * dt;
       }
 
-      // Locked-on facing (design doc: Souls-style targeting) always wins
-      // over movement-direction facing, moving or not, so strafing around a
-      // target keeps your front toward it instead of toward your feet.
+      // Facing: locked-on always wins (Souls-style targeting — strafing
+      // around a target keeps your front toward it, not toward your feet).
+      // Unlocked, facing follows the camera's own forward direction rather
+      // than movement direction — this used to default to "whichever way
+      // you last moved," which desyncs from what's actually centered on
+      // screen the moment you strafe or stand still, and was the real
+      // cause of melee (whose hit-arc is built from p.facing) feeling like
+      // it swung at nothing even when the camera was square on a target.
       if (!p.casting) {
         const lockPos = getLockOnTargetPosition(state);
         if (lockPos) {
           const dx = lockPos.x - p.position.x;
           const dz = lockPos.z - p.position.z;
           if (Math.hypot(dx, dz) > 0.01) p.facing = Math.atan2(dx, dz);
-        } else if (moveLen > 0.01) {
-          p.facing = Math.atan2(moveX, moveZ);
+        } else {
+          p.facing = Math.atan2(aimDirRef.current.x, aimDirRef.current.z);
         }
       }
 
@@ -182,9 +196,14 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         if (p.attackCooldownMs > 0 || p.stamina < config.staminaCost) return;
         p.stamina -= config.staminaCost;
         p.attackCooldownMs = config.cooldownMs;
-        p.attackActiveMs = 150;
+        p.attackActiveMs = ATTACK_ACTIVE_MS;
         p.attackHitApplied = false;
         p.activeMelee = config;
+        // Small forward step toward current facing so borderline spacing
+        // doesn't whiff — collision resolution later this same frame still
+        // catches any wall overlap this creates.
+        p.position.x += Math.sin(p.facing) * MELEE_LUNGE_DISTANCE;
+        p.position.z += Math.cos(p.facing) * MELEE_LUNGE_DISTANCE;
       };
       if (!p.casting && !p.blocking) {
         if (actions.attackHeavy) tryStartMelee(HEAVY_ATTACK);
@@ -229,8 +248,10 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     }
     actions.heal = false;
 
-    // Resolve the swing's single hit window
-    if (p.attackActiveMs > 0 && !p.attackHitApplied && p.activeMelee) {
+    // Resolve the swing's single hit window — deferred until
+    // ATTACK_HIT_DELAY_MS has elapsed (not the instant the button is
+    // pressed) so the swing has actual travel time before it can connect.
+    if (p.attackActiveMs > 0 && p.attackActiveMs <= ATTACK_ACTIVE_MS - ATTACK_HIT_DELAY_MS && !p.attackHitApplied && p.activeMelee) {
       const config = p.activeMelee;
       const forward = new THREE.Vector3(Math.sin(p.facing), 0, Math.cos(p.facing));
       for (const enemy of state.enemies) {

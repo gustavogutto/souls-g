@@ -40,6 +40,7 @@ export interface LookState {
   yaw: number;
   pitch: number;
   locked: boolean; // pointer-lock engaged — mouse-look does nothing until the player clicks once (browser API requirement)
+  zoomOffset: number; // scroll-wheel add-on to CameraRig's DESIRED_DISTANCE, clamped there
 }
 
 const YAW_SENSITIVITY = 0.0025;
@@ -47,6 +48,9 @@ const PITCH_SENSITIVITY = 0.0022;
 const MIN_PITCH = (20 * Math.PI) / 180;
 const MAX_PITCH = (65 * Math.PI) / 180;
 const INITIAL_PITCH = Math.atan2(10, 9); // matches the old fixed (0, 10, 9) camera offset
+const ZOOM_SENSITIVITY = 0.0035;
+const MIN_ZOOM_OFFSET = -3.5; // closer than default
+const MAX_ZOOM_OFFSET = 6; // further than default
 
 const KEY_AXIS_MAP: Record<string, keyof KeyboardAxes> = {
   KeyW: "forward",
@@ -79,7 +83,7 @@ function clamp(v: number, min: number, max: number): number {
 export function useGameInput() {
   const axes = useRef<KeyboardAxes>({ forward: false, back: false, left: false, right: false, sprint: false });
   const actions = useRef<ActionPulses>({ attackLight: false, attackHeavy: false, shieldBash: false, roll: false, heal: false, interact: false, cast: false, lockOn: false });
-  const look = useRef<LookState>({ yaw: 0, pitch: INITIAL_PITCH, locked: false });
+  const look = useRef<LookState>({ yaw: 0, pitch: INITIAL_PITCH, locked: false, zoomOffset: 0 });
   const held = useRef<HeldState>({ block: false });
 
   useEffect(() => {
@@ -127,6 +131,15 @@ export function useGameInput() {
       if (e.button === 2) held.current.block = false;
     };
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
+    // Scroll to zoom the third-person camera in/out (user request — a fixed
+    // distance never suited every fight/corridor). Gated on pointer lock
+    // like the other game-only inputs, both so menus keep their own scroll
+    // untouched and so it can't fire before the player's ever clicked in.
+    const onWheel = (e: WheelEvent) => {
+      if (!look.current.locked) return;
+      e.preventDefault();
+      look.current.zoomOffset = clamp(look.current.zoomOffset + e.deltaY * ZOOM_SENSITIVITY, MIN_ZOOM_OFFSET, MAX_ZOOM_OFFSET);
+    };
     const onLockChange = () => {
       look.current.locked = document.pointerLockElement != null;
       // Losing pointer lock (Escape, alt-tab) mid-hold must not leave the
@@ -140,6 +153,7 @@ export function useGameInput() {
     window.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
     window.addEventListener("contextmenu", onContextMenu);
+    window.addEventListener("wheel", onWheel, { passive: false });
     document.addEventListener("pointerlockchange", onLockChange);
     return () => {
       window.removeEventListener("keydown", down);
@@ -149,6 +163,7 @@ export function useGameInput() {
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("wheel", onWheel);
       document.removeEventListener("pointerlockchange", onLockChange);
     };
   }, []);

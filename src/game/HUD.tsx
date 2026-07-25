@@ -149,7 +149,7 @@ export function HUD({ state, look }: { state: GameState; look: React.MutableRefO
         }}
       >
         <div style={{ fontSize: 42, color: "#cc3333", letterSpacing: 4 }}>YOU DIED</div>
-        <div style={{ fontSize: 13, opacity: 0.7, marginTop: 12 }}>Refresh to try again</div>
+        <div style={{ fontSize: 13, opacity: 0.7, marginTop: 12 }}>Returning to the flame...</div>
       </div>
     </div>
   );

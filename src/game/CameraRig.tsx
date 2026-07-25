@@ -49,11 +49,16 @@ export function CameraRig({ state, dungeonGroup, look }: { state: GameState; dun
     const { yaw, pitch } = look.current;
     const desiredDir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
-    let allowedDistance = DESIRED_DISTANCE;
+    // Scroll-wheel zoom (input.ts's zoomOffset) — still floored at
+    // MIN_DISTANCE so zooming all the way in can't reintroduce the
+    // clip-into-character bug the base distance was tuned to avoid.
+    const targetDistance = Math.max(MIN_DISTANCE, DESIRED_DISTANCE + look.current.zoomOffset);
+
+    let allowedDistance = targetDistance;
     const dungeon = dungeonGroup.current;
     if (dungeon) {
       raycaster.current.set(lookAt, desiredDir);
-      raycaster.current.far = DESIRED_DISTANCE;
+      raycaster.current.far = targetDistance;
       raycaster.current.near = 0.01;
       const hits = raycaster.current.intersectObject(dungeon, true);
       if (hits.length > 0) allowedDistance = Math.max(MIN_DISTANCE, hits[0].distance - 0.3);
