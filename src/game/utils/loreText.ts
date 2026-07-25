@@ -6,9 +6,9 @@ import { Area } from "./constants";
 // rewritten once seen in place, not treated as final copy.
 
 export const INTRO_CRAWL_LINES: string[] = [
-  "Hohenberg was a fortress-city carved through a coastal mountain, from sea-root to spire. Its Ashen Order kept a Great Hearth burning at the mountain's heart — the fire's memory held the halls in their shape.",
+  "Ashveil was a fortress-city carved through a coastal mountain, from sea-root to spire. Its Ashen Order kept a Great Hearth burning at the mountain's heart — the fire's memory held the halls in their shape.",
   "Then the flood began. Slow at first. A tide where no tide should reach. The drowned did not stay dead — they washed back with each high water, nameless and wrong.",
-  "The last king learned the water's law: it claims by name. So he committed the great heresy — he struck his own name from every stone, book, and mouth in Hohenberg.",
+  "The last king learned the water's law: it claims by name. So he committed the great heresy — he struck his own name from every stone, book, and mouth in Ashveil.",
   "It worked. He cannot drown. He cannot die, cannot be remembered, cannot end. He persists at the top of the Hollow Spire — a king-shaped absence.",
   "You washed up at the mountain's frozen roots. No name, no memory. Nothing the flood can take. The perfect climber.",
 ];

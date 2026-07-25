@@ -12,8 +12,8 @@ export function TitleScreen({ canContinue, onContinue, onStart }: { canContinue:
         fontFamily: "Georgia, serif", color: "#e8e0d4", gap: 14,
       }}
     >
-      <h1 style={{ fontSize: 40, letterSpacing: 3, color: "#c9a84c", margin: 0 }}>HOHENBERG</h1>
-      <p style={{ fontSize: 14, color: "#6b7b8f", margin: "0 0 30px" }}>Echoes of the Old Continent</p>
+      <h1 style={{ fontSize: 40, letterSpacing: 3, color: "#c9a84c", margin: 0 }}>G SOULS</h1>
+      <p style={{ fontSize: 14, color: "#6b7b8f", margin: "0 0 30px" }}>The Drowning of Ashveil</p>
 
       {canContinue && (
         <button onClick={onContinue} style={menuButtonStyle}>
@@ -23,8 +23,6 @@ export function TitleScreen({ canContinue, onContinue, onStart }: { canContinue:
       <button onClick={onStart} style={menuButtonStyle}>
         START
       </button>
-
-      <div style={{ position: "absolute", right: 10, bottom: 8, fontSize: 9, color: "#3a3a4a" }}>souls-g</div>
     </div>
   );
 }
