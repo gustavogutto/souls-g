@@ -19,8 +19,9 @@ const SAVE_KEY = "echoes_hohenberg_3d_save_v1";
 // inside the already-saved `progress` object, so schemaVersion must bump
 // whenever ProgressFlags itself grows a field an old save won't have, or
 // Object.keys() on a missing field would throw for anyone loading an
-// older save. v6 adds `fp`.
-const SCHEMA_VERSION = 6;
+// older save. v6 adds `fp`. v7 adds `progress.introLoreShown`/
+// `progress.floorLoreShown`.
+const SCHEMA_VERSION = 7;
 
 export interface SaveData {
   schemaVersion: number;

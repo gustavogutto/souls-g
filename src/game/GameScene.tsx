@@ -25,6 +25,8 @@ import { AreaDebugPicker } from "./AreaDebugPicker";
 import { InventoryPanel } from "./InventoryPanel";
 import { loadGame, saveGame, applySaveData, toSaveData, type SaveData } from "./saveGame";
 import { getAreaTheme } from "./utils/areaThemes";
+import { INTRO_CRAWL_LINES, FLOOR_LORE } from "./utils/loreText";
+import { LoreOverlay } from "./LoreOverlay";
 
 const AUTOSAVE_INTERVAL_MS = 5000;
 
@@ -114,8 +116,24 @@ function Floor1Gameplay({
   const [flameOpen, setFlameOpen] = useState(false);
   const gateLabels = area === Area.HEARTH ? HEARTH_GATE_LABELS(state) : [];
 
+  // Narrative (design doc section 11) — both one-time-per-save. The intro
+  // crawl marks itself shown immediately (matching the 2D source: it
+  // shouldn't re-trigger just because the player closes the tab mid-crawl).
+  // Floor-clear lore instead defers its actual area/floor transition until
+  // the overlay is dismissed, via pendingAfterLoreRef, instead of racing it.
+  const [loreLines, setLoreLines] = useState<string[] | null>(null);
+  const pendingAfterLoreRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    state.paused = loreLines !== null;
+  }, [loreLines, state]);
+
   useEffect(() => {
     onStateReady(state);
+    if (area === Area.PROLOGUE && !progress.introLoreShown) {
+      progress.introLoreShown = true;
+      setLoreLines(INTRO_CRAWL_LINES);
+    }
     const interval = setInterval(() => saveGame(state), AUTOSAVE_INTERVAL_MS);
     return () => {
       clearInterval(interval);
@@ -123,6 +141,30 @@ function Floor1Gameplay({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const advanceFloor = () => {
+    if (isMultiFloorArea(area) && !isFinalFloor) onFloorAdvance(FLOOR_SEQUENCE[floorIdx + 1]);
+    else onAreaChange(Area.HEARTH);
+  };
+
+  const handleReachEnd = () => {
+    const loreKey = `${area}-${floor}`;
+    const loreLine = FLOOR_LORE[area]?.[floorIdx];
+    if (loreLine && !progress.floorLoreShown[loreKey]) {
+      progress.floorLoreShown[loreKey] = true;
+      pendingAfterLoreRef.current = advanceFloor;
+      setLoreLines([loreLine]);
+    } else {
+      advanceFloor();
+    }
+  };
+
+  const handleLoreDone = () => {
+    setLoreLines(null);
+    const pending = pendingAfterLoreRef.current;
+    pendingAfterLoreRef.current = null;
+    pending?.();
+  };
 
   return (
     <>
@@ -148,13 +190,7 @@ function Floor1Gameplay({
         <HearthNPCs state={state} input={input} onTalk={setActiveNpc} />
         <FlaviannaEncounter state={state} input={input} onTalk={() => setActiveNpc("flavianna")} />
         {isMultiFloorArea(area) && <Flames state={state} input={input} onInteract={() => setFlameOpen(true)} />}
-        <EndPortalWatcher
-          state={state}
-          onReachEnd={() => {
-            if (isMultiFloorArea(area) && !isFinalFloor) onFloorAdvance(FLOOR_SEQUENCE[floorIdx + 1]);
-            else onAreaChange(Area.HEARTH);
-          }}
-        />
+        <EndPortalWatcher state={state} onReachEnd={handleReachEnd} />
         <Projectiles state={state} />
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} look={input.look} />
       </Canvas>
@@ -179,6 +215,7 @@ function Floor1Gameplay({
         onWarp={onWarpToFlame}
         onReturnHearth={() => onAreaChange(Area.HEARTH)}
       />
+      {loreLines && <LoreOverlay lines={loreLines} onDone={handleLoreDone} />}
     </>
   );
 }

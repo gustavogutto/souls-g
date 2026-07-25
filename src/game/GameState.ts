@@ -206,10 +206,22 @@ export interface ProgressFlags {
   // floor) below. A plain object (not a Set) so it round-trips through
   // JSON in SaveData without a custom (de)serializer.
   discoveredFlames: Partial<Record<string, true>>;
+  // Narrative (design doc section 11) — both one-time-per-save, never
+  // re-triggered on a revisit. introLoreShown covers the opening crawl;
+  // floorLoreShown is keyed the same way as discoveredFlames.
+  introLoreShown: boolean;
+  floorLoreShown: Partial<Record<string, true>>;
 }
 
 export function createProgressFlags(): ProgressFlags {
-  return { prologueComplete: false, areaBossDefeated: {}, flaviannaMet: false, discoveredFlames: {} };
+  return {
+    prologueComplete: false,
+    areaBossDefeated: {},
+    flaviannaMet: false,
+    discoveredFlames: {},
+    introLoreShown: false,
+    floorLoreShown: {},
+  };
 }
 
 // Called from both the melee (Player.tsx) and spell (Projectiles.tsx) boss
