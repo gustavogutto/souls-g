@@ -21,6 +21,7 @@ export interface ActionPulses {
   heal: boolean;
   interact: boolean; // chests + secret-fight levers — no Hohenberg precedent (this port's own addition)
   cast: boolean; // dedicated cast key, design doc section 1's "Q/R" suggestion
+  lockOn: boolean; // middle-click toggle, this port's own addition (see GameState.toggleLockOn)
 }
 
 // Continuous (not pulsed) mouse-button state — block is a held stance, not
@@ -77,7 +78,7 @@ function clamp(v: number, min: number, max: number): number {
 
 export function useGameInput() {
   const axes = useRef<KeyboardAxes>({ forward: false, back: false, left: false, right: false, sprint: false });
-  const actions = useRef<ActionPulses>({ attackLight: false, attackHeavy: false, shieldBash: false, roll: false, heal: false, interact: false, cast: false });
+  const actions = useRef<ActionPulses>({ attackLight: false, attackHeavy: false, shieldBash: false, roll: false, heal: false, interact: false, cast: false, lockOn: false });
   const look = useRef<LookState>({ yaw: 0, pitch: INITIAL_PITCH, locked: false });
   const held = useRef<HeldState>({ block: false });
 
@@ -117,7 +118,10 @@ export function useGameInput() {
     const onMouseDown = (e: MouseEvent) => {
       if (!look.current.locked) return;
       if (e.button === 0) actions.current.attackLight = true;
-      else if (e.button === 2) held.current.block = true;
+      else if (e.button === 1) {
+        actions.current.lockOn = true;
+        e.preventDefault(); // middle-click otherwise triggers Chrome's autoscroll cursor
+      } else if (e.button === 2) held.current.block = true;
     };
     const onMouseUp = (e: MouseEvent) => {
       if (e.button === 2) held.current.block = false;

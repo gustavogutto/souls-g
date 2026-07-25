@@ -19,6 +19,7 @@ import { MartynaPanel, VarnPanel, StashPanel, TideRefusedPanel, FlaviannaPanel }
 import { Flames, LayerFlame } from "./Flames";
 import { FlamePanel } from "./FlamePanel";
 import { PortalEntry, PortalReturn } from "./Portal";
+import { LockOnMarker } from "./LockOnMarker";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
@@ -245,6 +246,7 @@ function Floor1Gameplay({
         )}
         <EndPortalWatcher state={state} onReachEnd={handleReachEnd} />
         <Projectiles state={state} />
+        <LockOnMarker state={state} />
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} look={input.look} />
       </Canvas>
       <HUD state={state} look={input.look} />

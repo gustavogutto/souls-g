@@ -114,7 +114,7 @@ export function HUD({ state, look }: { state: GameState; look: React.MutableRefO
       <div ref={logRef} style={{ position: "absolute", top: 20, left: 20, fontSize: 16, fontWeight: "bold", textShadow: "1px 1px 2px black" }} />
 
       <div style={{ position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", fontSize: 11, opacity: 0.55, textAlign: "center", lineHeight: 1.6 }}>
-        WASD move · I light / J heavy / L bash · Q cast · Space roll · F heal · E interact · C inventory · Shift sprint
+        WASD move · LMB attack · RMB block · Middle-click lock-on · J heavy / L bash · Q cast · Space roll · F heal · E interact · C inventory · Shift sprint
       </div>
 
       <div

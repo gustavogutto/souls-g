@@ -275,6 +275,56 @@ export function restAtFlame(state: GameState) {
   p.chillStacks = 0;
 }
 
+const LOCK_ON_MAX_RANGE = 14;
+const LOCK_ON_CONE_COS = Math.cos((55 * Math.PI) / 180); // must be roughly in view to lock
+
+export function getLockOnTargetPosition(state: GameState): THREE.Vector3 | null {
+  if (!state.lockOn) return null;
+  if (state.lockOn.kind === "boss") {
+    const boss = state.boss;
+    return boss && boss.hp > 0 && boss.aiState !== "dead" ? boss.position : null;
+  }
+  const enemy = state.enemies.find((e) => e.id === state.lockOn!.id);
+  return enemy && enemy.aiState !== "dead" ? enemy.position : null;
+}
+
+// Middle-click (design doc combat feedback: mouse+keyboard players want the
+// camera to do the aiming, not have to hand-track a target the whole fight).
+// Toggles off if already locked; otherwise picks whichever valid target is
+// closest to dead-center of the camera's forward cone, matching the "nearest
+// thing you're roughly looking at" convention every Souls game uses.
+export function toggleLockOn(state: GameState, camForward: THREE.Vector3) {
+  if (state.lockOn) {
+    state.lockOn = null;
+    return;
+  }
+  const p = state.player;
+  let best: { kind: "enemy" | "boss"; id: string } | null = null;
+  let bestScore = -Infinity;
+  const consider = (kind: "enemy" | "boss", id: string, pos: THREE.Vector3) => {
+    const to = new THREE.Vector3().subVectors(pos, p.position);
+    const dist = to.length();
+    if (dist > LOCK_ON_MAX_RANGE || dist < 0.01) return;
+    to.normalize();
+    const dot = camForward.dot(to);
+    if (dot < LOCK_ON_CONE_COS) return;
+    const score = dot - dist * 0.02;
+    if (score > bestScore) {
+      bestScore = score;
+      best = { kind, id };
+    }
+  };
+  for (const e of state.enemies) if (e.aiState !== "dead") consider("enemy", e.id, e.position);
+  if (state.boss && state.boss.hp > 0 && state.boss.aiState !== "dead") consider("boss", "boss", state.boss.position);
+  state.lockOn = best;
+}
+
+// Called every frame — drops the lock the instant its target dies, so combat
+// never gets stuck facing/orbiting a corpse.
+export function clearLockOnIfInvalid(state: GameState) {
+  if (state.lockOn && !getLockOnTargetPosition(state)) state.lockOn = null;
+}
+
 export interface GameState {
   mapData: MapData;
   area: Area;
@@ -316,6 +366,9 @@ export interface GameState {
   nextProjectileId: number;
   floatingText: FloatingText[];
   nextTextId: number;
+  // Souls-style lock-on (middle-click, see input.ts) — id is an EnemyState.id
+  // for "enemy", meaningless/unused for "boss" (only one can ever exist).
+  lockOn: { kind: "enemy" | "boss"; id: string } | null;
 }
 
 export function createPlayerState(spawn: { x: number; y: number }): PlayerState {
@@ -507,6 +560,7 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     nextProjectileId: 0,
     floatingText: [],
     nextTextId: 0,
+    lockOn: null,
   };
 }
 

@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Mesh, Group } from "three";
-import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile, handleBossDefeatReward, tickChill, chillSlowMultiplier, updateStatusEffects, breakCrate } from "./GameState";
+import { type GameState, spawnFloatingText, enemyDamageForRole, handleSpecialEnemyDeath, updateSecretFight, killPlayer, spawnProjectile, handleBossDefeatReward, tickChill, chillSlowMultiplier, updateStatusEffects, breakCrate, toggleLockOn, clearLockOnIfInvalid, getLockOnTargetPosition } from "./GameState";
 import { computeWeaponDamage, computeSpellDamage, getEffectiveMoveSpeed, getEffectiveStaminaRegenPerSec, getEffectiveHealFraction, applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { CINDER_WRETCH_DETONATE_RADIUS, CINDER_WRETCH_DETONATE_DAMAGE_MULT } from "./utils/enemyRoles";
 import { STAMINA_REGEN_PER_SEC } from "./utils/constants";
@@ -66,6 +66,12 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     aimDirRef.current.y = 0;
     if (aimDirRef.current.lengthSq() < 1e-6) aimDirRef.current.set(Math.sin(p.facing), 0, Math.cos(p.facing));
     aimDirRef.current.normalize();
+
+    // Lock-on (middle-click) — toggles using whatever the camera's currently
+    // pointed at, then drops automatically the instant the target dies.
+    if (actions.lockOn) toggleLockOn(state, aimDirRef.current);
+    actions.lockOn = false;
+    clearLockOnIfInvalid(state);
 
     // Cooldown timers
     if (p.attackCooldownMs > 0) p.attackCooldownMs = Math.max(0, p.attackCooldownMs - dtMs);
@@ -153,7 +159,20 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         speed *= chillSlowMultiplier(p);
         p.position.x += moveX * speed * dt;
         p.position.z += moveZ * speed * dt;
-        if (!p.casting) p.facing = Math.atan2(moveX, moveZ);
+      }
+
+      // Locked-on facing (design doc: Souls-style targeting) always wins
+      // over movement-direction facing, moving or not, so strafing around a
+      // target keeps your front toward it instead of toward your feet.
+      if (!p.casting) {
+        const lockPos = getLockOnTargetPosition(state);
+        if (lockPos) {
+          const dx = lockPos.x - p.position.x;
+          const dz = lockPos.z - p.position.z;
+          if (Math.hypot(dx, dz) > 0.01) p.facing = Math.atan2(dx, dz);
+        } else if (moveLen > 0.01) {
+          p.facing = Math.atan2(moveX, moveZ);
+        }
       }
 
       // Light/heavy/bash — left click/J/L. Blocked while casting (design doc
