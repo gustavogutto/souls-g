@@ -45,3 +45,9 @@ export const SOULS_PER_BOSS = 150;
 export const FP_REGEN_PER_SEC = 4;
 export const CAST_MOVE_SPEED_MULT = 0.4;
 export const CAST_REFUND_WINDOW_PCT = 0.4;
+
+// Right-click block (requires p.equipped.shield) — reduces incoming melee/
+// projectile/boss damage (never applied to a move flagged `unblockable`,
+// same gate the roll i-frame check already used) and slows movement while held.
+export const BLOCK_DAMAGE_REDUCTION = 0.75;
+export const BLOCK_MOVE_SPEED_MULT = 0.5;

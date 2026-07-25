@@ -42,6 +42,7 @@ export interface PlayerState {
   statusEffects: { type: StatusEffectType; remainingMs: number; tickCooldownMs: number }[];
   chillStacks: number;
   chillRemainingMs: number;
+  blocking: boolean; // right-click held, requires p.equipped.shield — see BLOCK_DAMAGE_REDUCTION
 }
 
 export type EnemyAIState = "idle" | "chase" | "windup" | "strike" | "recover" | "retreat" | "cower" | "dead";
@@ -363,6 +364,7 @@ export function createPlayerState(spawn: { x: number; y: number }): PlayerState 
     statusEffects: [],
     chillStacks: 0,
     chillRemainingMs: 0,
+    blocking: false,
   };
 }
 

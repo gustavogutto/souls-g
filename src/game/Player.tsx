@@ -21,6 +21,7 @@ import {
   FP_REGEN_PER_SEC,
   CAST_MOVE_SPEED_MULT,
   CAST_REFUND_WINDOW_PCT,
+  BLOCK_MOVE_SPEED_MULT,
   type MeleeAction,
 } from "./gameConstants";
 import { isGateBlocked, isShortcutDoorBlocked, resolveCollision } from "./maps/collision";
@@ -41,6 +42,11 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     const dtMs = dt * 1000;
     const axes = input.axes.current;
     const actions = input.actions.current;
+
+    // Right-click block (design doc's "shield" slot finally does something
+    // besides sit in the paper-doll) — requires a shield actually equipped,
+    // and drops the instant a cast or roll starts.
+    p.blocking = !!p.equipped.shield && input.held.current.block && !p.casting && !p.rolling;
 
     // Stamina regen (paused briefly by rolling/attacking, matching Hohenberg's feel)
     const regen = getEffectiveStaminaRegenPerSec(STAMINA_REGEN_PER_SEC, p.equipped, p.upgrades);
@@ -118,7 +124,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     // (Gravewake, Terra Sigil, Comet's End) can still be equipped via the
     // inventory screen but won't fire, so casting them is blocked here
     // rather than silently spending FP for nothing.
-    if (actions.cast && !p.casting && !p.rolling) {
+    if (actions.cast && !p.casting && !p.rolling && !p.blocking) {
       const spellId = p.equipped.spell;
       const def = spellId ? getItemDef(spellId) : null;
       if (def?.spell && def.spell.castType === "projectile" && p.fp >= def.spell.fpCost) {
@@ -143,14 +149,16 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         let speed = getEffectiveMoveSpeed(PLAYER_SPEED, p.equipped, p.upgrades);
         if (sprinting) speed *= 1.4;
         if (p.casting) speed *= CAST_MOVE_SPEED_MULT;
+        if (p.blocking) speed *= BLOCK_MOVE_SPEED_MULT;
         speed *= chillSlowMultiplier(p);
         p.position.x += moveX * speed * dt;
         p.position.z += moveZ * speed * dt;
         if (!p.casting) p.facing = Math.atan2(moveX, moveZ);
       }
 
-      // Light/heavy/bash — I/J/L keys. Blocked while casting (design doc
-      // section 4: a spell windup blocks melee/heal).
+      // Light/heavy/bash — left click/J/L. Blocked while casting (design doc
+      // section 4: a spell windup blocks melee/heal) or while the shield's
+      // actively raised (can't swing and block at once).
       const tryStartMelee = (config: MeleeAction) => {
         if (p.attackCooldownMs > 0 || p.stamina < config.staminaCost) return;
         p.stamina -= config.staminaCost;
@@ -159,7 +167,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
         p.attackHitApplied = false;
         p.activeMelee = config;
       };
-      if (!p.casting) {
+      if (!p.casting && !p.blocking) {
         if (actions.attackHeavy) tryStartMelee(HEAVY_ATTACK);
         else if (actions.shieldBash) tryStartMelee(SHIELD_BASH);
         else if (actions.attackLight) tryStartMelee(LIGHT_ATTACK);
@@ -323,6 +331,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     const mat = bodyRef.current.material as THREE.MeshStandardMaterial;
     if (p.hitFlashMs > 0) mat.emissive.setHex(0xff2222);
     else if (p.attackActiveMs > 0) mat.emissive.setHex(0x66aaff);
+    else if (p.blocking) mat.emissive.setHex(0xaaaaaa);
     else mat.emissive.setHex(0x000000);
   });
 

@@ -4,9 +4,12 @@ import * as THREE from "three";
 import type { GameState } from "./GameState";
 import type { LookState } from "./input";
 
-const LOOK_OFFSET = new THREE.Vector3(0, 1, 0);
-const MIN_DISTANCE = 3;
-const DESIRED_DISTANCE = Math.hypot(10, 9); // same overall camera distance as the old fixed (0, 10, 9) offset
+const LOOK_OFFSET = new THREE.Vector3(0, 1.3, 0);
+const MIN_DISTANCE = 1.6;
+// Pulled in from the old fixed (0, 10, 9) offset's ~13.4 units — that was a
+// carryover from the isometric 2D source's camera math, not a real
+// third-person distance. User feedback: "closer, like a 3rd view."
+const DESIRED_DISTANCE = 4.6;
 
 // Third-person orbit camera with a raycast-based pull-in: real procedural
 // corridors will clip a naive fixed-offset camera through walls constantly

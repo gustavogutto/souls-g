@@ -22,7 +22,6 @@ import { PortalEntry, PortalReturn } from "./Portal";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
-import { AreaDebugPicker } from "./AreaDebugPicker";
 import { InventoryPanel } from "./InventoryPanel";
 import { loadGame, saveGame, applySaveData, toSaveData, type SaveData } from "./saveGame";
 import { getAreaTheme } from "./utils/areaThemes";
@@ -372,7 +371,6 @@ export function GameScene({ onReturnToTitle }: { onReturnToTitle: () => void }) 
         onEnterPortal={handleEnterPortal}
         onExitPortal={handleExitPortal}
       />
-      <AreaDebugPicker area={area} onChange={handleAreaChange} />
     </div>
   );
 }

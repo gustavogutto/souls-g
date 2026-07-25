@@ -23,6 +23,12 @@ export interface ActionPulses {
   cast: boolean; // dedicated cast key, design doc section 1's "Q/R" suggestion
 }
 
+// Continuous (not pulsed) mouse-button state — block is a held stance, not
+// a one-shot action, so it can't live in ActionPulses' consume-once model.
+export interface HeldState {
+  block: boolean;
+}
+
 // Souls-like third-person orbit: yaw is free (mouse X), pitch is clamped to
 // a narrow band so the camera can't flip into a free-fly top-down/underneath
 // view — see design doc section 1's "fixed-ish pitch" framing. Both Player
@@ -73,6 +79,7 @@ export function useGameInput() {
   const axes = useRef<KeyboardAxes>({ forward: false, back: false, left: false, right: false, sprint: false });
   const actions = useRef<ActionPulses>({ attackLight: false, attackHeavy: false, shieldBash: false, roll: false, heal: false, interact: false, cast: false });
   const look = useRef<LookState>({ yaw: 0, pitch: INITIAL_PITCH, locked: false });
+  const held = useRef<HeldState>({ block: false });
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -102,24 +109,47 @@ export function useGameInput() {
         document.body.requestPointerLock();
       }
     };
+    // Left click = attack, right click (held) = raise shield — only once
+    // the pointer is actually locked, so the very first click (which just
+    // engages pointer lock via onClick above) doesn't also throw a punch,
+    // and so UI buttons (inventory, NPC panels) underneath an unlocked
+    // cursor never trigger combat.
+    const onMouseDown = (e: MouseEvent) => {
+      if (!look.current.locked) return;
+      if (e.button === 0) actions.current.attackLight = true;
+      else if (e.button === 2) held.current.block = true;
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) held.current.block = false;
+    };
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
     const onLockChange = () => {
       look.current.locked = document.pointerLockElement != null;
+      // Losing pointer lock (Escape, alt-tab) mid-hold must not leave the
+      // player stuck permanently blocking with no way to release the key.
+      if (!look.current.locked) held.current.block = false;
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("click", onClick);
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("contextmenu", onContextMenu);
     document.addEventListener("pointerlockchange", onLockChange);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("click", onClick);
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("pointerlockchange", onLockChange);
     };
   }, []);
 
-  return { axes, actions, look };
+  return { axes, actions, look, held };
 }
 
 export type GameInput = ReturnType<typeof useGameInput>;

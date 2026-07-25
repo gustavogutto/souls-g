@@ -7,6 +7,7 @@ import { applyDamageReduction } from "./utils/equipment";
 import { isWallTile, resolveCollision } from "./maps/collision";
 import { bossMovesForType, bossVisualForType, BOSS_COMBAT, TIDEWARDEN_GRAB_TRIGGER_RANGE, TIDEWARDEN_HEAL_PUNISH_WINDOW_MS, type BossMove } from "./utils/bossData";
 import { PROJECTILE_EFFECT_BY_TYPE } from "./utils/statusEffects";
+import { BLOCK_DAMAGE_REDUCTION } from "./gameConstants";
 
 const BOSS_RADIUS = 0.9;
 
@@ -79,7 +80,8 @@ function applyBossHitToPlayer(boss: BossState, state: GameState, move: BossMove)
   if (p.dead) return;
   if (p.rolling && !move.unblockable) return;
   const raw = Math.round(boss.baseDamage * move.damageMultiplier);
-  const dmg = applyDamageReduction(raw, p.equipped, p.upgrades);
+  let dmg = applyDamageReduction(raw, p.equipped, p.upgrades);
+  if (p.blocking && !move.unblockable) dmg = Math.round(dmg * (1 - BLOCK_DAMAGE_REDUCTION));
   p.hp = Math.max(0, p.hp - dmg);
   p.hitFlashMs = 200;
   spawnFloatingText(state, `${dmg}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), move.unblockable ? "#ff55ff" : "#ff5555");

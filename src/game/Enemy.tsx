@@ -28,6 +28,7 @@ import { PROJECTILE_EFFECT_BY_TYPE } from "./utils/statusEffects";
 import { hasLineOfSight } from "./utils/lineOfSight";
 import { isWallTile, resolveCollision } from "./maps/collision";
 import { findPath } from "./maps/pathfinding";
+import { BLOCK_DAMAGE_REDUCTION } from "./gameConstants";
 
 const ENEMY_RADIUS = 0.4;
 const REPATH_INTERVAL_MS = 500;
@@ -93,7 +94,8 @@ function applyMeleeHitToPlayer(e: EnemyState, state: GameState, damageMultiplier
   const p = state.player;
   if (p.rolling || p.dead) return;
   const raw = Math.round(enemyDamageForRole(e) * damageMultiplier);
-  const dmg = applyDamageReduction(raw, p.equipped, p.upgrades);
+  let dmg = applyDamageReduction(raw, p.equipped, p.upgrades);
+  if (p.blocking) dmg = Math.round(dmg * (1 - BLOCK_DAMAGE_REDUCTION));
   p.hp = Math.max(0, p.hp - dmg);
   p.hitFlashMs = 200;
   spawnFloatingText(state, `${dmg}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ff5555");

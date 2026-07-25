@@ -5,7 +5,7 @@ import type { Mesh } from "three";
 import { type GameState, spawnFloatingText, killPlayer, handleSpecialEnemyDeath, handleBossDefeatReward, applyChill, applyStatusEffect } from "./GameState";
 import { applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { isWallTile } from "./maps/collision";
-import { PROJECTILE_POOL_SIZE, SOULS_PER_KILL, SOULS_PER_BOSS } from "./gameConstants";
+import { PROJECTILE_POOL_SIZE, SOULS_PER_KILL, SOULS_PER_BOSS, BLOCK_DAMAGE_REDUCTION } from "./gameConstants";
 
 const HIT_RADIUS = 0.45;
 const HOMING_RANGE = 6; // units — Ashmote's "6-unit cone" per design doc section 5
@@ -62,7 +62,8 @@ export function Projectiles({ state }: { state: GameState }) {
           const dx = proj.position.x - p.position.x;
           const dz = proj.position.z - p.position.z;
           if (Math.hypot(dx, dz) < HIT_RADIUS) {
-            const dmg = applyDamageReduction(proj.damage, p.equipped, p.upgrades);
+            let dmg = applyDamageReduction(proj.damage, p.equipped, p.upgrades);
+            if (p.blocking) dmg = Math.round(dmg * (1 - BLOCK_DAMAGE_REDUCTION));
             p.hp = Math.max(0, p.hp - dmg);
             p.hitFlashMs = 200;
             spawnFloatingText(state, `${dmg}`, p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ff5555");

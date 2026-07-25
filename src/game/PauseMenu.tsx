@@ -1,7 +1,6 @@
 // Design doc section 15 — the in-run system menu. Trimmed from the 2D
 // source's PauseScene: RESUME + RETURN TO TITLE only (no PROGRESS/SETTINGS
-// rows — no minimap or settings exist yet in this port to back them; no
-// DEV row — the existing AreaDebugPicker already covers that need here).
+// rows — no minimap or settings exist yet in this port to back them).
 export function PauseMenu({ open, onResume, onReturnToTitle }: { open: boolean; onResume: () => void; onReturnToTitle: () => void }) {
   if (!open) return null;
 
