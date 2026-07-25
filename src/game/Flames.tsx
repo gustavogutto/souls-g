@@ -1,5 +1,6 @@
 import { useFrame } from "@react-three/fiber";
-import type { GameState } from "./GameState";
+import * as THREE from "three";
+import { restAtFlame, spawnFloatingText, type GameState } from "./GameState";
 import type { GameInput } from "./input";
 
 const INTERACT_RANGE = 1.5;
@@ -44,4 +45,31 @@ export function Flames({ state, input, onInteract }: { state: GameState; input: 
       ))}
     </group>
   );
+}
+
+// The bonus labyrinth's own dedicated checkpoint (design doc section 2,
+// MapData.layerFlameSpawn) — rest-only, deliberately NOT routed through
+// FlamePanel: that panel auto-marks the current floor's flame discovered
+// the moment it's opened and offers a TRAVEL/ASHEN HEARTH escape hatch,
+// either of which would let the player claim the echo boss's real reward
+// (see handleBossDefeatReward) for free just by walking up to this flame,
+// no boss fight required.
+export function LayerFlame({ state, input }: { state: GameState; input: GameInput }) {
+  const spot = state.mapData.layerFlameSpawn;
+
+  useFrame(() => {
+    if (state.paused || !spot) return;
+    if (!input.actions.current.interact) return;
+    const p = state.player;
+    const dx = spot.x + 0.5 - p.position.x;
+    const dz = spot.y + 0.5 - p.position.z;
+    if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
+      input.actions.current.interact = false;
+      restAtFlame(state);
+      spawnFloatingText(state, "Restored", p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ff8c00");
+    }
+  });
+
+  if (!spot) return null;
+  return <FlameProp x={spot.x} y={spot.y} />;
 }

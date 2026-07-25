@@ -4,7 +4,7 @@ import * as THREE from "three";
 import type { Mesh } from "three";
 import { createGameState, createProgressFlags, type GameState, type ProgressFlags } from "./GameState";
 import { useGameInput } from "./input";
-import { generateMap, generateHearthMap, FLOOR_SEQUENCE } from "./maps/MapGenerator";
+import { generateMap, generateHearthMap, generatePortalLabyrinth, FLOOR_SEQUENCE, type MapData } from "./maps/MapGenerator";
 import { Floor, Area, AREA_CONFIGS } from "./utils/constants";
 import { DungeonRenderer } from "./DungeonRenderer";
 import { Player } from "./Player";
@@ -16,8 +16,9 @@ import { HearthGates, HEARTH_GATE_LABELS } from "./HearthGates";
 import { HearthNPCs, type HearthNpcId } from "./HearthNPCs";
 import { FlaviannaEncounter } from "./FlaviannaEncounter";
 import { MartynaPanel, VarnPanel, StashPanel, TideRefusedPanel, FlaviannaPanel } from "./HearthNPCPanels";
-import { Flames } from "./Flames";
+import { Flames, LayerFlame } from "./Flames";
 import { FlamePanel } from "./FlamePanel";
+import { PortalEntry, PortalReturn } from "./Portal";
 import { Projectiles } from "./Projectiles";
 import { CameraRig } from "./CameraRig";
 import { HUD } from "./HUD";
@@ -58,6 +59,14 @@ function isMultiFloorArea(area: Area): boolean {
   return area !== Area.HEARTH && area !== Area.PROLOGUE;
 }
 
+// Seamless-portal eligibility (design doc section 2: "floors 2-3 of every
+// area, never the floor right before a boss"). FLOOR_SEQUENCE is
+// [BASEMENT, GROUND, SECOND, THIRD, TOP] — GROUND/SECOND are indices 1-2;
+// THIRD immediately precedes the final TOP boss floor, so it's excluded.
+function isPortalEligibleFloor(floor: Floor): boolean {
+  return floor === Floor.GROUND || floor === Floor.SECOND;
+}
+
 // Watches GameState.reachedEnd (set by Player.tsx once the player steps onto
 // the end_portal tile) and fires onReachEnd exactly once — mirrors the
 // pulse-consumption pattern Interactables.tsx uses for the "E" action, just
@@ -83,6 +92,8 @@ function EndPortalWatcher({ state, onReachEnd }: { state: GameState; onReachEnd:
 function Floor1Gameplay({
   area,
   floor,
+  layer,
+  portalReturnAnchor,
   initialSave,
   progress,
   onStateReady,
@@ -90,9 +101,13 @@ function Floor1Gameplay({
   onFloorAdvance,
   onWarpToFlame,
   onReturnToTitle,
+  onEnterPortal,
+  onExitPortal,
 }: {
   area: Area;
   floor: Floor;
+  layer: "ground" | "bonus";
+  portalReturnAnchor: { x: number; y: number } | null;
   initialSave: SaveData | null;
   progress: ProgressFlags;
   onStateReady: (state: GameState) => void;
@@ -100,12 +115,18 @@ function Floor1Gameplay({
   onFloorAdvance: (f: Floor) => void;
   onWarpToFlame: (a: Area, f: Floor) => void;
   onReturnToTitle: () => void;
+  onEnterPortal: (anchor: { x: number; y: number }) => void;
+  onExitPortal: () => void;
 }) {
   const dungeonGroupRef = useRef<THREE.Group>(null!);
-  const mapData = useMemo(() => (area === Area.HEARTH ? generateHearthMap() : generateMap(floor, area)), [area, floor]);
+  const mapData: MapData = useMemo(() => {
+    if (area === Area.HEARTH) return generateHearthMap();
+    if (layer === "bonus") return generatePortalLabyrinth(floor, area, portalReturnAnchor?.x ?? 0, portalReturnAnchor?.y ?? 0);
+    return generateMap(floor, area);
+  }, [area, floor, layer, portalReturnAnchor]);
   const theme = useMemo(() => getAreaTheme(area), [area]);
   const [state] = useState<GameState>(() => {
-    const s = createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier, progress, floor);
+    const s = createGameState(mapData, area, AREA_CONFIGS[area].enemyDamageMultiplier, progress, floor, layer === "bonus");
     // Always apply whatever the caller passed — GameScene's carrySaveRef is
     // kept current across every transition (see its own comment), not just
     // matched against the very first page-load position.
@@ -214,6 +235,15 @@ function Floor1Gameplay({
         <HearthNPCs state={state} input={input} onTalk={setActiveNpc} />
         <FlaviannaEncounter state={state} input={input} onTalk={() => setActiveNpc("flavianna")} />
         {isMultiFloorArea(area) && <Flames state={state} input={input} onInteract={() => setFlameOpen(true)} />}
+        {layer === "ground" && isMultiFloorArea(area) && isPortalEligibleFloor(floor) && (
+          <PortalEntry state={state} input={input} onEnter={() => mapData.portalAnchor && onEnterPortal(mapData.portalAnchor)} />
+        )}
+        {layer === "bonus" && (
+          <>
+            <LayerFlame state={state} input={input} />
+            <PortalReturn state={state} input={input} onReturn={onExitPortal} />
+          </>
+        )}
         <EndPortalWatcher state={state} onReachEnd={handleReachEnd} />
         <Projectiles state={state} />
         <CameraRig state={state} dungeonGroup={dungeonGroupRef} look={input.look} />
@@ -273,6 +303,13 @@ export function GameScene({ onReturnToTitle }: { onReturnToTitle: () => void }) 
   // transition, so the next mount always carries the real player forward
   // instead of resetting to createPlayerState() defaults.
   const carrySaveRef = useRef<SaveData | null>(initialSave);
+  // Seamless-portal system (design doc section 2) — "ground" is the normal
+  // floor, "bonus" is the hidden labyrinth reached through it. Neither is
+  // persisted in SaveData: quitting/reloading while inside a bonus layer
+  // just drops the player back on the ground floor next session, same as
+  // any other unsaved-position transition in this game.
+  const [layer, setLayer] = useState<"ground" | "bonus">("ground");
+  const [portalReturnAnchor, setPortalReturnAnchor] = useState<{ x: number; y: number } | null>(null);
 
   const captureCarry = () => {
     if (!liveStateRef.current) return;
@@ -286,11 +323,13 @@ export function GameScene({ onReturnToTitle }: { onReturnToTitle: () => void }) 
     captureCarry();
     setFloor(Floor.BASEMENT); // a fresh area (or the debug picker) always starts at its own floor 1
     setArea(next);
+    setLayer("ground"); // a portal anchor is only ever meaningful on the ground floor that spawned it
   };
 
   const handleFloorAdvance = (next: Floor) => {
     captureCarry();
     setFloor(next);
+    setLayer("ground");
   };
 
   // TRAVEL — a one-way warp to a specific discovered flame's exact area AND
@@ -299,14 +338,28 @@ export function GameScene({ onReturnToTitle }: { onReturnToTitle: () => void }) 
     captureCarry();
     setArea(nextArea);
     setFloor(nextFloor);
+    setLayer("ground");
+  };
+
+  const handleEnterPortal = (anchor: { x: number; y: number }) => {
+    captureCarry();
+    setPortalReturnAnchor(anchor);
+    setLayer("bonus");
+  };
+
+  const handleExitPortal = () => {
+    captureCarry();
+    setLayer("ground");
   };
 
   return (
     <div style={{ position: "relative", width: "100vw", height: "100vh", background: "#0a0a12" }}>
       <Floor1Gameplay
-        key={`${area}-${floor}`}
+        key={`${area}-${floor}-${layer}`}
         area={area}
         floor={floor}
+        layer={layer}
+        portalReturnAnchor={portalReturnAnchor}
         initialSave={carrySaveRef.current}
         progress={progressRef.current}
         onStateReady={(state) => {
@@ -316,6 +369,8 @@ export function GameScene({ onReturnToTitle }: { onReturnToTitle: () => void }) 
         onFloorAdvance={handleFloorAdvance}
         onWarpToFlame={handleWarp}
         onReturnToTitle={onReturnToTitle}
+        onEnterPortal={handleEnterPortal}
+        onExitPortal={handleExitPortal}
       />
       <AreaDebugPicker area={area} onChange={handleAreaChange} />
     </div>

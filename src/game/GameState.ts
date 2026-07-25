@@ -241,6 +241,18 @@ export function markFlameDiscovered(state: GameState, area: Area, floor: Floor) 
   state.progress.discoveredFlames[flameKey(area, floor)] = true;
 }
 
+// Shared by both boss-kill paths (Player.tsx melee, Projectiles.tsx spell)
+// — an echo boss (state.isBonusLayer) must never trigger the real area's
+// cleared/gate-unlock flag (design doc section 2's hard separation), so it
+// routes to auto-discovering that floor's own checkpoint flame instead.
+// state.area/state.floor still mirror the ground floor that spawned this
+// bonus layer (see GameState.isBonusLayer's own comment), so this is
+// exactly "that floor's" flame, not a guess.
+export function handleBossDefeatReward(state: GameState) {
+  if (state.isBonusLayer) markFlameDiscovered(state, state.area, state.floor);
+  else markBossDefeated(state);
+}
+
 export function listDiscoveredFlames(progress: ProgressFlags): { area: Area; floor: Floor }[] {
   return Object.keys(progress.discoveredFlames)
     .filter((k) => progress.discoveredFlames[k])
@@ -266,6 +278,14 @@ export interface GameState {
   mapData: MapData;
   area: Area;
   floor: Floor;
+  // Seamless-portal system (design doc section 2) — true for a bonus
+  // labyrinth's own GameState (see GameScene's handleEnterPortal). area/
+  // floor still mirror whichever ground floor spawned it, so
+  // markBossDefeated's own state.area/state.floor read stays meaningful —
+  // only the boss-death branch (Player.tsx/Projectiles.tsx) actually reads
+  // this flag, to route the echo boss's reward at a checkpoint-flame
+  // discovery instead of the real area-cleared/gate-unlock logic.
+  isBonusLayer: boolean;
   progress: ProgressFlags;
   paused: boolean; // set true while a full-screen UI panel (inventory, etc) is open
   player: PlayerState;
@@ -422,7 +442,7 @@ export function createEnemyState(id: string, type: string, role: EnemyRole, posi
 // straight from MapData.enemySpawns (real per-area rosters from
 // AREA_CONFIGS, via MapGenerator) mapped to a role through enemyRoles.ts's
 // own roleForType() — no hardcoded demo enemy list anymore.
-export function createGameState(mapData: MapData, area: Area, areaDamageMultiplier: number, progress: ProgressFlags = createProgressFlags(), floor: Floor = Floor.BASEMENT): GameState {
+export function createGameState(mapData: MapData, area: Area, areaDamageMultiplier: number, progress: ProgressFlags = createProgressFlags(), floor: Floor = Floor.BASEMENT, isBonusLayer = false): GameState {
   const enemies = mapData.enemySpawns.map((spawn, i) => {
     const role = roleForType(spawn.type);
     return createEnemyState(`${spawn.type}-${i}`, spawn.type, role, new THREE.Vector3(spawn.x + 0.5, 0, spawn.y + 0.5), areaDamageMultiplier);
@@ -433,7 +453,9 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     mapData.bossSpawn && areaConfig.bossType
       ? createBossState(
           mapData.bossSpawn.type,
-          areaConfig.bossName,
+          // "Reduced narrative weight" (design doc section 2) — same stats
+          // and moves as the real fight, just labeled as a lesser echo of it.
+          isBonusLayer ? `Echo of ${areaConfig.bossName}` : areaConfig.bossName,
           areaConfig.bossHP,
           areaConfig.bossDamage,
           new THREE.Vector3(mapData.bossSpawn.x + 0.5, 0, mapData.bossSpawn.y + 0.5)
@@ -460,6 +482,7 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     mapData,
     area,
     floor,
+    isBonusLayer,
     progress,
     paused: false,
     player: createPlayerState(mapData.playerSpawn),

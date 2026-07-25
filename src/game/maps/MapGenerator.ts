@@ -6,9 +6,9 @@ import { SECRET_FIGHT_BY_AREA } from "../utils/secretFights";
 // flood-tile algorithm and the "normal floor" spawn fields are ported
 // near-verbatim (the algorithm has zero engine dependency — only the
 // isometric-sprite rendering step doesn't carry over, and that's replaced by
-// DungeonRenderer.tsx). Deliberately NOT yet ported: the seamless-portal
-// prototype (portals/portalAnchor/layerFlameSpawn) and its "echo boss"
-// system. fallenAdventurerSpawn, merchantNpcSpawn (Flavianna), vaultSpawn
+// DungeonRenderer.tsx). The seamless-portal system (portals/portalAnchor/
+// layerFlameSpawn/generatePortalLabyrinth) and its "echo boss" reward are
+// now ported too. fallenAdventurerSpawn, merchantNpcSpawn (Flavianna), vaultSpawn
 // (the Mystery Vault), illusoryWallSpawn, and "The Ring" archetype's
 // shortcut-gate loop corridor are now ported; breakableSpawns (crates) is
 // a new addition scattered on free tiles rather than the 2D source's
@@ -77,6 +77,22 @@ export interface MapData {
   // Not guaranteed every "Ring" floor — see generateLabyrinth's own comment
   // on why a passing candidate isn't always found.
   shortcutDoorSpawn?: { gateTiles: { x: number; y: number }[]; openFromX: number; openFromY: number };
+  // Seamless-portal system (design doc section 2) — where a bonus-labyrinth
+  // portal ramp would sit on this (ground-layer) floor, computed
+  // unconditionally on every generateMap() call (cheap, same precedent as
+  // ashenFlameSpawn). It's the caller's job (GameScene) to decide whether
+  // this floor is actually eligible to wire one up (floors 2-3 of every
+  // area, never the floor right before a boss) — undefined if no free tile
+  // was found near the chosen path-fraction room.
+  portalAnchor?: { x: number; y: number };
+  // Bonus-layer only (see generatePortalLabyrinth) — a dedicated checkpoint
+  // at the layer's own landing tile. Deliberately not ashenFlameSpawn/
+  // startFlameSpawn (those are the ground layer's own checkpoint/respawn
+  // fields; reusing them here would repoint a respawn at the wrong layer).
+  layerFlameSpawn?: { x: number; y: number };
+  // Bonus-layer only — the return-to-ground portal, planted at the
+  // labyrinth's own spawn point so leaving is always one interact away.
+  portals?: { id: string; x: number; y: number; targetX: number; targetY: number; label: string }[];
   // Hearth-only (see generateHearthMap): one gate per travel destination,
   // rendered/interacted by HearthGates.tsx. Undefined on every normal
   // procedurally-generated floor.
@@ -472,7 +488,7 @@ function findFreeTileNear(
   return undefined;
 }
 
-export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
+export function generateMap(floor: Floor, area: Area = Area.AREA_1, forceBoss = false): MapData {
   const areaConfig = AREA_CONFIGS[area];
   const width = areaConfig.mapSize;
   const height = areaConfig.mapSize;
@@ -483,9 +499,13 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   // The prologue is a single self-contained floor (its own boss, the
   // Tidewarden, regardless of which Floor enum value it's generated with) —
   // every other area is the real "5 floors, boss only on the last" shape.
+  // forceBoss (only ever passed by generatePortalLabyrinth) overrides this
+  // for the bonus layer's own "echo boss" room — without it, GROUND/SECOND
+  // (the only portal-eligible floors) never carve a boss room at all, so
+  // mapData.bossSpawn would always come back undefined.
   const isFinalFloor = area === Area.PROLOGUE || floorIdx === FLOOR_SEQUENCE.length - 1;
 
-  const { map: rawMap, rooms, floodTiles, sortedMain, shortcutGate } = generateLabyrinth(width, height, archetype, area, isFinalFloor);
+  const { map: rawMap, rooms, floodTiles, sortedMain, shortcutGate } = generateLabyrinth(width, height, archetype, area, isFinalFloor || forceBoss);
   const tideArea = area === Area.AREA_2;
   const tiles: TileData[] = [];
   const floorTiles: { x: number; y: number }[] = [];
@@ -767,6 +787,14 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
   if (!ashenFlameSpawn) ashenFlameSpawn = findFreeTileNear(flameRoom.center, [[0, 0]] as const, isFreeTile, markTileUsed);
   if (!ashenFlameSpawn) ashenFlameSpawn = findFreeTileNear(startRoom.center, [[0, 0]] as const, isFreeTile, markTileUsed);
 
+  // Seamless-portal system — portalAnchor, a separate Math.random() roll
+  // from flameFraction above so the portal and the mid-floor flame don't
+  // systematically land in the same room. Computed unconditionally; see
+  // MapData's own comment on why eligibility is the caller's job.
+  const portalFraction = 0.4 + Math.random() * 0.35;
+  const portalRoom = pickRoomAtPathFraction(sortedMain, portalFraction);
+  const portalAnchor = findFreeTileNear(portalRoom.center, flameOffsets, isFreeTile, markTileUsed);
+
   // Secret lever fight (see utils/secretFights.ts) — one per area that has
   // one configured, not one per floor, so it's pinned to a single floor
   // index (the "Galleries" middle floor) rather than generated on every
@@ -829,7 +857,7 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     tiles, width, height, playerSpawn, enemySpawns, chestSpawns, doorSpawns,
     bossSpawn, cellarStairs, endPoint, startPoint, bossGateDoor,
     ashenFlameSpawn, startFlameSpawn, propSpawns, leverSpawn, merchantNpcSpawn,
-    fallenAdventurerSpawn, breakableSpawns, vaultSpawn, illusoryWallSpawn, shortcutDoorSpawn: shortcutGate,
+    fallenAdventurerSpawn, breakableSpawns, vaultSpawn, illusoryWallSpawn, shortcutDoorSpawn: shortcutGate, portalAnchor,
   };
 }
 
@@ -851,6 +879,68 @@ export function generateCellarMap(area: Area): MapData {
     enemySpawns: [{ x: center, y: center, type: "enemy_elite_ward" }],
     chestSpawns: [{ x: center, y: 2, itemId: chestItemId }],
     doorSpawns: [], propSpawns: [],
+  };
+}
+
+// Bonus-layer content for the seamless-portal system (design doc section
+// 2) — deliberately just generateMap()'s own output with everything
+// progression-critical or layer-specific stripped back out. A full real
+// floor size + a real mob roster + a genuinely fresh random layout all
+// come for free from generateMap() itself (unseeded Math.random(), size
+// pulled straight from AREA_CONFIGS[area].mapSize) — no separate generator
+// needed. Loot (chestSpawns/vaultSpawn/illusoryWallSpawn/
+// fallenAdventurerSpawn) passes through safely since GameState's own
+// per-visit tracking (openedChests/vaultOpened/etc.) lives on a fresh
+// GameState built for this layer, never shared with the ground floor's.
+// bossSpawn ALSO passes through (the "echo boss" — generateMap() always
+// carves a real boss room regardless of caller) with no bossGateDoor/
+// endPoint, so the room is simply walkable, no gate to unlock. Stripped:
+// merchantNpcSpawn (hard-locked to a specific area+floor-index combo this
+// bonus call has no special awareness of), and ashenFlameSpawn/
+// startFlameSpawn (the *ground* layer's own checkpoint/respawn fields —
+// reusing them here would repoint a respawn at the wrong layer; see
+// MapData.layerFlameSpawn for the bonus layer's own dedicated one).
+export function generatePortalLabyrinth(floor: Floor, area: Area, returnTargetX: number, returnTargetY: number): MapData {
+  // forceBoss=true — GROUND/SECOND (the only portal-eligible floors, see
+  // GameScene's isPortalEligibleFloor) are never the area's real final
+  // floor, so generateMap() alone would never carve a boss room here.
+  const generated = generateMap(floor, area, true);
+
+  // generateMap() always drops an "end_portal"-typed tile at its endRoom's
+  // center regardless of forceBoss (real floor-advance is gated on
+  // MapData.endPoint being set, not on this tile type — see Player.tsx —
+  // and that field is deliberately never copied into this function's
+  // return below). Left as-is it'd just be a cosmetically-orphaned portal
+  // tile with no function sitting in the bonus layer, so it's flattened
+  // back to plain floor here.
+  const tiles = generated.tiles.map((t) => (t.type === "end_portal" ? { ...t, type: "floor" as const } : t));
+
+  const wallKeys = new Set(tiles.filter((t) => t.type === "wall").map((t) => `${t.x},${t.y}`));
+  const layerFlameOffsets = [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [-1, -1], [1, -1], [-1, 1]] as const;
+  const isFreeLayerTile = (x: number, y: number) => x >= 0 && y >= 0 && x < generated.width && y < generated.height && !wallKeys.has(`${x},${y}`);
+  const layerFlameSpawn = findFreeTileNear(generated.playerSpawn, layerFlameOffsets, isFreeLayerTile, (x, y) => wallKeys.add(`${x},${y}`));
+
+  return {
+    tiles,
+    width: generated.width,
+    height: generated.height,
+    playerSpawn: generated.playerSpawn,
+    startPoint: generated.startPoint,
+    enemySpawns: generated.enemySpawns,
+    chestSpawns: generated.chestSpawns,
+    doorSpawns: generated.doorSpawns,
+    propSpawns: generated.propSpawns,
+    vaultSpawn: generated.vaultSpawn,
+    illusoryWallSpawn: generated.illusoryWallSpawn,
+    fallenAdventurerSpawn: generated.fallenAdventurerSpawn,
+    layerFlameSpawn,
+    // The echo boss — the exact room/type generateMap() already carved for
+    // this area's real boss, reused verbatim. No bossGateDoor/endPoint
+    // means the room is simply walkable from the start; GameState.ts's
+    // boss-death handling checks state.isBonusLayer to keep this from ever
+    // triggering the real area-cleared/gate-unlock logic.
+    bossSpawn: generated.bossSpawn,
+    portals: [{ id: "portal-return", x: generated.playerSpawn.x, y: generated.playerSpawn.y, targetX: returnTargetX, targetY: returnTargetY, label: "Return" }],
   };
 }
 
