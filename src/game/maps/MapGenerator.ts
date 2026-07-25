@@ -6,16 +6,16 @@ import { SECRET_FIGHT_BY_AREA } from "../utils/secretFights";
 // flood-tile algorithm and the "normal floor" spawn fields are ported
 // near-verbatim (the algorithm has zero engine dependency — only the
 // isometric-sprite rendering step doesn't carry over, and that's replaced by
-// DungeonRenderer.tsx). Deliberately NOT yet ported: vaultSpawn (the Mystery
-// Vault gamble chest) and illusoryWallSpawn, the seamless-portal prototype
-// (portals/portalAnchor/layerFlameSpawn), and "The Ring" archetype's
-// shortcut-gate loop corridor (the structural loop bypass corridor itself
-// is also skipped for the same reason — it's a bonus route, not required
-// for start->boss->end connectivity). fallenAdventurerSpawn and
-// merchantNpcSpawn (Flavianna) are now ported; breakableSpawns (crates) is
-// a new addition scattered on free tiles rather than the 2D source's
-// hand-placed prologue coordinates, since this port's prologue is
-// procedural rather than hand-authored.
+// DungeonRenderer.tsx). Deliberately NOT yet ported: illusoryWallSpawn, the
+// seamless-portal prototype (portals/portalAnchor/layerFlameSpawn), and
+// "The Ring" archetype's shortcut-gate loop corridor (the structural loop
+// bypass corridor itself is also skipped for the same reason — it's a
+// bonus route, not required for start->boss->end connectivity).
+// fallenAdventurerSpawn, merchantNpcSpawn (Flavianna), and vaultSpawn (the
+// Mystery Vault) are now ported; breakableSpawns (crates) is a new addition
+// scattered on free tiles rather than the 2D source's hand-placed prologue
+// coordinates, since this port's prologue is procedural rather than
+// hand-authored.
 
 export interface TileData {
   x: number;
@@ -60,6 +60,13 @@ export interface MapData {
   // construction: an unlucky room roll with no dead-end rooms just means no
   // spawn that run, same absence precedent as ashenFlameSpawn/leverSpawn.
   merchantNpcSpawn?: { x: number; y: number };
+  // Mystery Vault (design doc section 13) — a lever paired with a gamble
+  // chest, outcome pre-rolled at generation time (not on pull) so a visual
+  // tell can be shown before the player commits. Not guaranteed every
+  // floor — needs a 4th dead-end room beyond the 3 the regular chest
+  // scatter already claims, same acceptable-absence precedent as
+  // merchantNpcSpawn/leverSpawn above.
+  vaultSpawn?: { chestX: number; chestY: number; leverX: number; leverY: number; outcome: "jackpot" | "decent" | "cursed"; itemId: string };
   // Hearth-only (see generateHearthMap): one gate per travel destination,
   // rendered/interacted by HearthGates.tsx. Undefined on every normal
   // procedurally-generated floor.
@@ -571,6 +578,23 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     }
   }
 
+  // Mystery Vault — a lever paired with a gamble chest, one dead-end room
+  // beyond the 3 already claimed by the regular chest scatter above.
+  // Outcome is rolled here (not on pull) so a visual tell can be shown
+  // before the player commits — never re-rolled at interact time.
+  let vaultSpawn: MapData["vaultSpawn"];
+  if (deadEndRooms.length > 3) {
+    const room = deadEndRooms[3];
+    const vaultOffsets = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]] as const;
+    const leverPos = findFreeTileNear(room.center, vaultOffsets, isFreeTile, markTileUsed);
+    const chestPos = leverPos && findFreeTileNear(room.center, vaultOffsets, isFreeTile, markTileUsed);
+    if (leverPos && chestPos) {
+      const roll = Math.random();
+      const outcome: "jackpot" | "decent" | "cursed" = roll < 0.15 ? "jackpot" : roll < 0.7 ? "decent" : "cursed";
+      vaultSpawn = { chestX: chestPos.x, chestY: chestPos.y, leverX: leverPos.x, leverY: leverPos.y, outcome, itemId: getNextChestItem() };
+    }
+  }
+
   const normalRoomsForChests = rooms.filter((r) => r.tag === "normal");
   const targetChests = areaConfig.numChests || 6;
   for (let i = chestSpawns.length; i < targetChests; i++) {
@@ -690,7 +714,7 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1): MapData {
     tiles, width, height, playerSpawn, enemySpawns, chestSpawns, doorSpawns,
     bossSpawn, cellarStairs, endPoint, startPoint, bossGateDoor,
     ashenFlameSpawn, startFlameSpawn, propSpawns, leverSpawn, merchantNpcSpawn,
-    fallenAdventurerSpawn, breakableSpawns,
+    fallenAdventurerSpawn, breakableSpawns, vaultSpawn,
   };
 }
 

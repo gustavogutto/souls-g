@@ -276,6 +276,8 @@ export interface GameState {
   secretFight?: SecretFightState;
   fallenAdventurerLooted: boolean;
   brokenCrates: Set<string>; // `${x},${y}` keys into mapData.breakableSpawns
+  vaultLeverPulled: boolean;
+  vaultOpened: boolean;
   hazards: GroundHazard[];
   nextHazardId: number;
   // True while mapData.bossGateDoor should block player movement (see
@@ -466,6 +468,8 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     secretFight,
     fallenAdventurerLooted: false,
     brokenCrates: new Set(),
+    vaultLeverPulled: false,
+    vaultOpened: false,
     hazards: [],
     nextHazardId: 0,
     gateLocked: !!(boss && mapData.bossGateDoor),
@@ -555,6 +559,42 @@ export function breakCrate(state: GameState, x: number, y: number) {
   const souls = 3 + Math.floor(Math.random() * 6);
   state.player.stats.souls += souls;
   spawnFloatingText(state, `+${souls}`, new THREE.Vector3(x + 0.5, 1.6, y + 0.5), "#ffd700");
+}
+
+// Mystery Vault (design doc section 13) — the lever must be pulled before
+// the paired chest responds at all.
+export function pullVaultLever(state: GameState) {
+  if (!state.mapData.vaultSpawn || state.vaultLeverPulled) return;
+  state.vaultLeverPulled = true;
+  spawnFloatingText(state, "The lever gives way with a groan.", state.player.position.clone().add(new THREE.Vector3(0, 2, 0)), "#c9a84c");
+}
+
+// Outcome was pre-rolled at generation time (MapGenerator.ts's vaultSpawn) —
+// this only ever applies it, never re-rolls. Cursed spawns an ambush
+// instead of granting loot (2D source precedent: bounded scope, reuses the
+// same enemy roster/tuning every normal spawn already uses).
+export function openVault(state: GameState) {
+  const v = state.mapData.vaultSpawn;
+  if (!v || !state.vaultLeverPulled || state.vaultOpened) return;
+  state.vaultOpened = true;
+  const textPos = new THREE.Vector3(v.chestX + 0.5, 2.2, v.chestY + 0.5);
+  if (v.outcome === "jackpot") {
+    grantItem(state, v.itemId);
+    state.player.stats.souls += 300;
+    spawnFloatingText(state, "Jackpot — and souls besides.", textPos, "#ffd700");
+  } else if (v.outcome === "decent") {
+    grantItem(state, v.itemId);
+    spawnFloatingText(state, "A fair haul.", textPos, "#ffd700");
+  } else {
+    spawnFloatingText(state, "Something was waiting.", textPos, "#ff5555");
+    const enemyTypes = AREA_CONFIGS[state.area].enemyTypes;
+    if (enemyTypes.length > 0) {
+      for (const [ox, oy] of [[1, 0], [-1, 0]] as const) {
+        const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+        spawnEnemyAt(state, type, v.chestX + 0.5 + ox, v.chestY + 0.5 + oy);
+      }
+    }
+  }
 }
 
 // Spawns the fight's starting roster at the lever and marks it triggered —
