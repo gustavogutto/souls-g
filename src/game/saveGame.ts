@@ -1,27 +1,63 @@
 import type { PlayerStats } from "./utils/constants";
-import { Area, Floor } from "./utils/constants";
+import { Area, Floor, AREA_CONFIGS } from "./utils/constants";
 import type { ItemSlot } from "./utils/items";
 import type { ItemUpgrades } from "./utils/equipment";
 import { getEffectiveMaxHP } from "./utils/equipment";
 import { getMaxStamina } from "./utils/constants";
 import type { GameState, ProgressFlags } from "./GameState";
 
-// Minimal single-slot save (phase 3 of the 3D conversion plan) — just the
-// player's own progression (stats/gear/hp/flasks) plus which area/floor they
-// were on. NOT yet saved: exact position, floor-content state (opened
-// chests, dead enemies), since MapGenerator isn't seeded yet (generateMap()
-// is unseeded Math.random(), same as the source game before its own
-// mapSeed fix) — a reload always regenerates a fresh layout of the saved
-// area+floor rather than resuming the exact same one. Full floor-state
-// persistence is a separate, not-yet-built gap.
-const SAVE_KEY = "echoes_hohenberg_3d_save_v1";
+// 3 named save slots (design doc section 14) — just the player's own
+// progression (stats/gear/hp/flasks) plus which area/floor they were on.
+// NOT yet saved: exact position, floor-content state (opened chests, dead
+// enemies), since MapGenerator isn't seeded yet (generateMap() is unseeded
+// Math.random(), same as the source game before its own mapSeed fix) — a
+// reload always regenerates a fresh layout of the saved area+floor rather
+// than resuming the exact same one. Full floor-state persistence is a
+// separate, not-yet-built gap.
+export const SAVE_SLOT_COUNT = 3;
+const SAVE_KEY_PREFIX = "echoes_hohenberg_3d_save_slot_";
+const LAST_ACTIVE_SLOT_KEY = "echoes_hohenberg_3d_last_active_slot";
 // v5 adds `progress.discoveredFlames`, `progress.flaviannaMet` — both live
 // inside the already-saved `progress` object, so schemaVersion must bump
 // whenever ProgressFlags itself grows a field an old save won't have, or
 // Object.keys() on a missing field would throw for anyone loading an
 // older save. v6 adds `fp`. v7 adds `progress.introLoreShown`/
-// `progress.floorLoreShown`.
-const SCHEMA_VERSION = 7;
+// `progress.floorLoreShown`. v8 moves to per-slot storage keys and adds
+// `lastPlayedAt`.
+const SCHEMA_VERSION = 8;
+
+function slotKey(slot: number): string {
+  return `${SAVE_KEY_PREFIX}${slot}`;
+}
+
+// In-memory only, set by the slot picker before GameScene ever mounts —
+// every saveGame()/loadGame() call site stays zero-argument (bar the
+// picker's own summary reads) and just targets whichever slot is active.
+let activeSlot = 0;
+
+export function setActiveSlot(slot: number) {
+  activeSlot = slot;
+  try {
+    localStorage.setItem(LAST_ACTIVE_SLOT_KEY, String(slot));
+  } catch {
+    // Storage unavailable — the picker just won't remember a default highlight.
+  }
+}
+
+export function getActiveSlot(): number {
+  return activeSlot;
+}
+
+// Read by the slot picker to decide which row to default-highlight on open.
+export function getLastActiveSlot(): number {
+  try {
+    const raw = localStorage.getItem(LAST_ACTIVE_SLOT_KEY);
+    const n = raw !== null ? parseInt(raw, 10) : 0;
+    return Number.isFinite(n) && n >= 0 && n < SAVE_SLOT_COUNT ? n : 0;
+  } catch {
+    return 0;
+  }
+}
 
 export interface SaveData {
   schemaVersion: number;
@@ -35,6 +71,7 @@ export interface SaveData {
   flaskCharges: number;
   progress: ProgressFlags;
   stash: string[];
+  lastPlayedAt: number;
 }
 
 // Shared by saveGame() (localStorage) and GameScene's in-memory carry-over
@@ -54,22 +91,23 @@ export function toSaveData(state: GameState): SaveData {
     flaskCharges: p.flaskCharges,
     progress: state.progress,
     stash: p.stash,
+    lastPlayedAt: Date.now(),
   };
 }
 
 export function saveGame(state: GameState) {
   const data = toSaveData(state);
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    localStorage.setItem(slotKey(activeSlot), JSON.stringify(data));
   } catch {
     // localStorage unavailable (private browsing, quota) — never let a save
     // failure interrupt gameplay.
   }
 }
 
-export function loadGame(): SaveData | null {
+export function loadGame(slot: number = activeSlot): SaveData | null {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(slotKey(slot));
     if (!raw) return null;
     const data = JSON.parse(raw) as SaveData;
     if (data.schemaVersion !== SCHEMA_VERSION) return null;
@@ -83,12 +121,41 @@ export function loadGame(): SaveData | null {
   }
 }
 
-export function deleteSave() {
+export function hasAnySave(): boolean {
+  for (let i = 0; i < SAVE_SLOT_COUNT; i++) {
+    if (loadGame(i)) return true;
+  }
+  return false;
+}
+
+export function deleteSlot(slot: number) {
   try {
-    localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem(slotKey(slot));
   } catch {
     // no-op
   }
+}
+
+export interface SlotSummary {
+  level: number;
+  areaName: string;
+  floor: Floor;
+  souls: number;
+  lastPlayedAt: number;
+}
+
+// Reads just enough of a slot's save for the picker's per-row display —
+// null ("Empty") if the slot has nothing or fails to parse.
+export function readSlotSummary(slot: number): SlotSummary | null {
+  const data = loadGame(slot);
+  if (!data) return null;
+  return {
+    level: data.stats.level,
+    areaName: AREA_CONFIGS[data.area]?.name ?? "?",
+    floor: data.floor,
+    souls: data.stats.souls,
+    lastPlayedAt: data.lastPlayedAt ?? 0,
+  };
 }
 
 // Applies saved player data onto a freshly created GameState. Max HP/stamina
