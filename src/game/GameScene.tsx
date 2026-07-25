@@ -27,6 +27,7 @@ import { loadGame, saveGame, applySaveData, toSaveData, type SaveData } from "./
 import { getAreaTheme } from "./utils/areaThemes";
 import { INTRO_CRAWL_LINES, FLOOR_LORE } from "./utils/loreText";
 import { LoreOverlay } from "./LoreOverlay";
+import { PauseMenu } from "./PauseMenu";
 
 const AUTOSAVE_INTERVAL_MS = 5000;
 
@@ -87,6 +88,7 @@ function Floor1Gameplay({
   onAreaChange,
   onFloorAdvance,
   onWarpToFlame,
+  onReturnToTitle,
 }: {
   area: Area;
   floor: Floor;
@@ -96,6 +98,7 @@ function Floor1Gameplay({
   onAreaChange: (a: Area) => void;
   onFloorAdvance: (f: Floor) => void;
   onWarpToFlame: (a: Area, f: Floor) => void;
+  onReturnToTitle: () => void;
 }) {
   const dungeonGroupRef = useRef<THREE.Group>(null!);
   const mapData = useMemo(() => (area === Area.HEARTH ? generateHearthMap() : generateMap(floor, area)), [area, floor]);
@@ -115,6 +118,7 @@ function Floor1Gameplay({
   const [activeNpc, setActiveNpc] = useState<HearthNpcId | null>(null);
   const [flameOpen, setFlameOpen] = useState(false);
   const [wallRevealVersion, setWallRevealVersion] = useState(0);
+  const [pauseOpen, setPauseOpen] = useState(false);
   const gateLabels = area === Area.HEARTH ? HEARTH_GATE_LABELS(state) : [];
 
   // Narrative (design doc section 11) — both one-time-per-save. The intro
@@ -125,9 +129,27 @@ function Floor1Gameplay({
   const [loreLines, setLoreLines] = useState<string[] | null>(null);
   const pendingAfterLoreRef = useRef<(() => void) | null>(null);
 
+  const anyNamedOverlayOpen = loreLines !== null || activeNpc !== null || inventoryOpen || flameOpen;
+
   useEffect(() => {
-    state.paused = loreLines !== null;
-  }, [loreLines, state]);
+    state.paused = anyNamedOverlayOpen || pauseOpen;
+  }, [anyNamedOverlayOpen, pauseOpen, state]);
+
+  // Pause menu (design doc section 15) — Escape toggles it, but only when
+  // no other named overlay currently owns the screen (each of those already
+  // has its own Escape-closes-me listener; registering ours at the same
+  // time would double-fire on the exact same keypress, since DOM listeners
+  // don't know about each other). Not registering this listener at all
+  // while another overlay is up sidesteps that race entirely, rather than
+  // trying to out-guess ordering between independent listeners.
+  useEffect(() => {
+    if (anyNamedOverlayOpen && !pauseOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Escape") setPauseOpen((o) => !o);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [anyNamedOverlayOpen, pauseOpen]);
 
   useEffect(() => {
     onStateReady(state);
@@ -217,11 +239,19 @@ function Floor1Gameplay({
         onReturnHearth={() => onAreaChange(Area.HEARTH)}
       />
       {loreLines && <LoreOverlay lines={loreLines} onDone={handleLoreDone} />}
+      <PauseMenu
+        open={pauseOpen}
+        onResume={() => setPauseOpen(false)}
+        onReturnToTitle={() => {
+          saveGame(state);
+          onReturnToTitle();
+        }}
+      />
     </>
   );
 }
 
-export function GameScene() {
+export function GameScene({ onReturnToTitle }: { onReturnToTitle: () => void }) {
   const initialSave = useMemo(() => loadGame(), []);
   // A brand new game (no save yet) begins in the prologue, not the Hearth —
   // design doc section 2: "leaving [the prologue] for the first time ever
@@ -283,6 +313,7 @@ export function GameScene() {
         onAreaChange={handleAreaChange}
         onFloorAdvance={handleFloorAdvance}
         onWarpToFlame={handleWarp}
+        onReturnToTitle={onReturnToTitle}
       />
       <AreaDebugPicker area={area} onChange={handleAreaChange} />
     </div>

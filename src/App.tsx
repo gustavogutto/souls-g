@@ -40,7 +40,7 @@ function App() {
     );
   }
 
-  return <GameScene />;
+  return <GameScene onReturnToTitle={() => setScreen("title")} />;
 }
 
 export default App;
