@@ -214,7 +214,18 @@ function Floor1Gameplay({
 
   return (
     <>
-      <Canvas shadows camera={{ fov: 45, near: 0.1, far: 200 }}>
+      {/* dpr defaults to [1,2] in r3f — on any display with devicePixelRatio
+          above 1 (extremely common: laptop displays at 125-200% OS scaling,
+          most 4K monitors, all Retina/HiDPI screens) that's up to 4x the
+          shaded pixels of a plain 1:1 canvas. Fullscreen also covers far more
+          physical screen area than a windowed tab (no browser chrome eating
+          into it), so both effects compound — measured live: 54fps windowed
+          vs 15fps fullscreen on this user's hardware, a ~3.5x drop that
+          tracks almost exactly with dpr/area scaling, not entity count (already
+          confirmed separately: cutting enemies 96->24 didn't move this at all).
+          Capping dpr at 1 trades some supersampling sharpness for directly
+          undoing that multiplier. */}
+      <Canvas shadows dpr={1} camera={{ fov: 45, near: 0.1, far: 200 }}>
         <color attach="background" args={[theme.background]} />
         <fog attach="fog" args={[theme.fogColor, theme.fogNear, theme.fogFar]} />
         <ambientLight intensity={theme.ambientIntensity} color={theme.ambientColor} />
