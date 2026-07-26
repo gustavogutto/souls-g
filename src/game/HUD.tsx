@@ -55,6 +55,17 @@ export function HUD({ state, look }: { state: GameState; look: React.MutableRefO
           setTimeout(() => line.remove(), 1400);
           while (logRef.current.childNodes.length > 6) logRef.current.removeChild(logRef.current.firstChild!);
         }
+        // Same leak class as GameState.spawnFloatingText's own fix — ids only
+        // ever increase and only the last few floatingText entries are ever
+        // inspected (above), so nothing past a small recent window is ever
+        // useful again. Set iteration order matches insertion (== id) order
+        // here, so the first value is always the oldest.
+        const MAX_SHOWN_IDS = 20;
+        while (shownTextIds.current.size > MAX_SHOWN_IDS) {
+          const oldest = shownTextIds.current.values().next().value;
+          if (oldest === undefined) break;
+          shownTextIds.current.delete(oldest);
+        }
       }
 
       if (deathRef.current) deathRef.current.style.display = p.dead ? "flex" : "none";

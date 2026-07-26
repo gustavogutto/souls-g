@@ -920,6 +920,17 @@ export function respawnAtCheckpoint(state: GameState) {
   restAtFlame(state);
 }
 
+// Real, unbounded memory leak found 2026-07-26: this pushed a new entry
+// (with its own cloned Vector3) for every hit/heal/kill for the entire game
+// session — HUD.tsx only ever reads the last 4 via slice(-4), nothing
+// anywhere removed old ones. `ageMs` looks like it was meant to drive expiry
+// but was never ticked or checked by anything. Reported as progressively
+// worsening FPS over a play session (144fps down to 27fps across a few
+// back-to-back measurements in the same static scene) — capping here
+// instead of adding a new per-frame tick elsewhere, since nothing reads
+// more than the last few entries anyway.
+const MAX_FLOATING_TEXT = 30;
+
 export function spawnFloatingText(state: GameState, text: string, position: THREE.Vector3, color: string) {
   state.floatingText.push({
     id: state.nextTextId++,
@@ -928,6 +939,9 @@ export function spawnFloatingText(state: GameState, text: string, position: THRE
     ageMs: 0,
     color,
   });
+  if (state.floatingText.length > MAX_FLOATING_TEXT) {
+    state.floatingText.splice(0, state.floatingText.length - MAX_FLOATING_TEXT);
+  }
 }
 
 // Matches Hohenberg's GameScene.ts formula exactly (ENEMY_BASE_DAMAGE tuned
