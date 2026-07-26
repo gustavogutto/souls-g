@@ -3,6 +3,7 @@ import type { GameState } from "./GameState";
 import { PLAYER_RADIUS } from "./Player";
 import { ENEMY_RADIUS } from "./Enemy";
 import { BOSS_RADIUS } from "./Boss";
+import { isGateBlocked, isShortcutDoorBlocked, resolveCollision } from "./maps/collision";
 
 // Player/enemy/boss movement (see Player.tsx, Enemy.tsx's stepToward, Boss.tsx's
 // stepBossToward/resolveBossStrike) only ever resolves against the wall grid —
@@ -52,6 +53,25 @@ export function EntitySeparation({ state }: { state: GameState }) {
       }
       if (bossAlive) separate(enemies[i].position, ENEMY_RADIUS, boss!.position, BOSS_RADIUS);
     }
+
+    // separate() only ever knows about other entities, never the wall grid —
+    // with enemy counts now regularly in the dozens per room, several
+    // overlapping pushes can stack on the same entity in a single frame and
+    // shove it clean through a 1-unit wall with nothing to stop it (this is
+    // almost certainly the "walls disappear, I can walk into the void" bug
+    // reported right after this file was added). Re-resolve everyone against
+    // walls immediately after applying this frame's pushes so a separation
+    // shove can never leave anyone clipped into or through geometry.
+    if (!p.dead) {
+      resolveCollision(state.mapData, p.position, PLAYER_RADIUS, (tx, ty) =>
+        isGateBlocked(state.mapData, state.gateLocked, tx, ty) || isShortcutDoorBlocked(state.mapData, state.shortcutDoorOpened, tx, ty)
+      );
+    }
+    for (const e of enemies) {
+      if (e.aiState === "dead") continue;
+      resolveCollision(state.mapData, e.position, ENEMY_RADIUS);
+    }
+    if (bossAlive) resolveCollision(state.mapData, boss!.position, BOSS_RADIUS);
   });
   return null;
 }

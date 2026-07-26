@@ -15,6 +15,10 @@ import { SECRET_FIGHT_BY_AREA } from "../utils/secretFights";
 // hand-placed prologue coordinates, since this port's prologue is
 // procedural rather than hand-authored.
 
+// Hard cap on live enemies per floor — see the cap site below (after
+// enemySpawns is fully built) for why this exists.
+const MAX_ENEMIES_PER_FLOOR = 24;
+
 export interface TileData {
   x: number;
   y: number;
@@ -628,6 +632,23 @@ export function generateMap(floor: Floor, area: Area = Area.AREA_1, forceBoss = 
     const tile = floorTiles[Math.floor(Math.random() * floorTiles.length)];
     const dist = Math.abs(tile.x - playerSpawn.x) + Math.abs(tile.y - playerSpawn.y);
     if (dist > 8) enemySpawns.push({ x: tile.x, y: tile.y, type: enemyTypes[Math.floor(Math.random() * enemyTypes.length)] });
+  }
+
+  // Per-room enemy counts (numInRoom above, unchanged since before the
+  // 2026-07-26 map-size passes) were never the problem — room COUNT growing
+  // with the bigger maps was, and it multiplies straight through: a
+  // headless count across every area/floor post-scaling came back at 40-96
+  // concurrent enemies per floor, every one of them a live, individually
+  // rendered/simulated entity regardless of distance from the player. That's
+  // real, reported lag (2026-07-26 session), not just a one-off GC bug.
+  // Capping here bounds the total regardless of how big future map-size
+  // tuning gets, without touching the per-room placement logic/variety above.
+  if (enemySpawns.length > MAX_ENEMIES_PER_FLOOR) {
+    for (let i = enemySpawns.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [enemySpawns[i], enemySpawns[j]] = [enemySpawns[j], enemySpawns[i]];
+    }
+    enemySpawns.length = MAX_ENEMIES_PER_FLOOR;
   }
 
   let bossSpawn: { x: number; y: number; type: string } | undefined;
