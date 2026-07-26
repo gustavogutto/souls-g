@@ -143,10 +143,10 @@ export function InventoryPanel({ state, open, setOpen }: { state: GameState; ope
       onClick={onClose}
     >
       <div
-        style={{ width: 640, maxWidth: "94vw", maxHeight: "88vh", overflowY: "auto", background: "#12121c", border: "1px solid #3a3a4a", borderRadius: 8, padding: 20, display: "flex", gap: 20 }}
+        style={{ width: 720, minWidth: 560, maxWidth: "94vw", maxHeight: "88vh", overflowY: "auto", background: "#12121c", border: "1px solid #3a3a4a", borderRadius: 8, padding: 20, display: "flex", gap: 24 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ width: 190, flexShrink: 0 }}>
+        <div style={{ width: 210, flexShrink: 0, overflow: "hidden", borderRight: "1px solid #26263a", paddingRight: 20 }}>
           <div style={{ fontSize: 20, letterSpacing: 1, color: "#c9a84c", marginBottom: 14 }}>EQUIPMENT</div>
           {DOLL_ROWS.map((row, ri) => (
             <div key={ri} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
@@ -186,7 +186,7 @@ export function InventoryPanel({ state, open, setOpen }: { state: GameState; ope
           </div>
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
             <div style={{ fontSize: 13, letterSpacing: 1, opacity: 0.7 }}>INVENTORY ({p.inventory.length})</div>
             <div style={{ fontSize: 11, opacity: 0.6 }}>C / Esc to close</div>
@@ -219,19 +219,19 @@ export function InventoryPanel({ state, open, setOpen }: { state: GameState; ope
                   onMouseEnter={() => equippable && setPreviewItemId(itemId)}
                   onMouseLeave={() => setPreviewItemId(null)}
                   style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
                     border: `1px solid ${rarityCss(RARITY_COLOR[def.rarity])}`, borderRadius: 4,
                     padding: "6px 10px", background: "rgba(255,255,255,0.02)",
                   }}
                 >
-                  <div>
+                  <div style={{ minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
                     <span style={{ color: rarityCss(RARITY_COLOR[def.rarity]), fontSize: 13 }}>{def.name}</span>
                     <span style={{ fontSize: 11, opacity: 0.5, marginLeft: 8 }}>{SLOT_LABEL[def.slot]}</span>
                   </div>
                   {equippable && (
                     <button
                       onClick={() => equipItem(itemId)}
-                      style={{ fontSize: 11, padding: "3px 10px", borderRadius: 3, border: "1px solid #c9a84c", background: "rgba(201,168,76,0.15)", color: "#e8e0d4", cursor: "pointer" }}
+                      style={{ flexShrink: 0, fontSize: 11, padding: "3px 10px", borderRadius: 3, border: "1px solid #c9a84c", background: "rgba(201,168,76,0.15)", color: "#e8e0d4", cursor: "pointer" }}
                     >
                       Equip
                     </button>

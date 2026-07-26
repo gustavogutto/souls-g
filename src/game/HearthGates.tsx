@@ -42,20 +42,36 @@ function Gate({ gate }: { gate: { x: number; y: number; area: Area; label: strin
 // Interactables.tsx, except this changes area instead of mutating GameState.
 export function HearthGates({ state, input, onTravel }: { state: GameState; input: GameInput; onTravel: (area: Area) => void }) {
   const gates = state.mapData.areaGates;
+  // See Interactables.tsx's comment on this pattern — only clears
+  // state.interactPrompt when this component was the one showing it. Travel
+  // is deliberately left unrestricted here (no clear-requirement gating) —
+  // the user wants free travel for testing right now.
+  const ownsPromptRef = useRef(false);
 
   useFrame(() => {
     if (!gates || state.paused) return;
-    const pulse = input.actions.current.interact;
-    if (!pulse) return;
     const p = state.player;
+    let nearby: (typeof gates)[number] | null = null;
     for (const gate of gates) {
       const dx = gate.x + 0.5 - p.position.x;
       const dz = gate.y + 0.5 - p.position.z;
       if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
-        input.actions.current.interact = false;
-        onTravel(gate.area);
-        return;
+        nearby = gate;
+        break;
       }
+    }
+
+    if (nearby) {
+      state.interactPrompt = `Travel to ${nearby.label}`;
+      ownsPromptRef.current = true;
+    } else if (ownsPromptRef.current) {
+      state.interactPrompt = null;
+      ownsPromptRef.current = false;
+    }
+
+    if (nearby && input.actions.current.interact) {
+      input.actions.current.interact = false;
+      onTravel(nearby.area);
     }
   });
 

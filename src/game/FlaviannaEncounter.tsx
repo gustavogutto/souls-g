@@ -1,4 +1,5 @@
 import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
 import type { GameState } from "./GameState";
 import type { GameInput } from "./input";
 
@@ -10,14 +11,26 @@ const INTERACT_RANGE = 1.6;
 // reachable at the Hearth instead (HearthNPCs.tsx), same as the 2D source.
 export function FlaviannaEncounter({ state, input, onTalk }: { state: GameState; input: GameInput; onTalk: () => void }) {
   const spawn = state.mapData.merchantNpcSpawn;
+  // See Interactables.tsx's comment on this pattern — only clears
+  // state.interactPrompt when this component was the one showing it.
+  const ownsPromptRef = useRef(false);
 
   useFrame(() => {
     if (!spawn || state.progress.flaviannaMet || state.paused) return;
-    if (!input.actions.current.interact) return;
     const p = state.player;
     const dx = spawn.x + 0.5 - p.position.x;
     const dz = spawn.y + 0.5 - p.position.z;
-    if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
+    const inRange = Math.hypot(dx, dz) <= INTERACT_RANGE;
+
+    if (inRange) {
+      state.interactPrompt = "Talk to Flavianna";
+      ownsPromptRef.current = true;
+    } else if (ownsPromptRef.current) {
+      state.interactPrompt = null;
+      ownsPromptRef.current = false;
+    }
+
+    if (inRange && input.actions.current.interact) {
       input.actions.current.interact = false;
       onTalk();
     }

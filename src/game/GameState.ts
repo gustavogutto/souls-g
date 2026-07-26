@@ -370,6 +370,15 @@ export interface GameState {
   // Souls-style lock-on (middle-click, see input.ts) — id is an EnemyState.id
   // for "enemy", meaningless/unused for "boss" (only one can ever exist).
   lockOn: { kind: "enemy" | "boss"; id: string } | null;
+  // Contextual "[E] Talk"/"Open"/"Rest"/"Travel to X" HUD prompt (added
+  // 2026-07-26, replacing the old always-on generic "E interact" hint with
+  // nothing telling the player what E actually does right now). Each
+  // interactable system (Interactables/HearthNPCs/Flames/HearthGates) sets
+  // this to its own label whenever the player is in range, and clears it
+  // only when IT was the one showing a prompt — never blindly nulls it,
+  // since that would clobber a different system's active prompt on the same
+  // frame. See each file's own comment for the ownership-ref pattern.
+  interactPrompt: string | null;
 }
 
 export function createPlayerState(spawn: { x: number; y: number }): PlayerState {
@@ -563,6 +572,7 @@ export function createGameState(mapData: MapData, area: Area, areaDamageMultipli
     floatingText: [],
     nextTextId: 0,
     lockOn: null,
+    interactPrompt: null,
   };
 }
 

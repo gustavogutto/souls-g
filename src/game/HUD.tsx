@@ -25,6 +25,7 @@ export function HUD({ state, look }: { state: GameState; look: React.MutableRefO
   const shownTextIds = useRef<Set<number>>(new Set());
   const lookHintRef = useRef<HTMLDivElement>(null);
   const reticleRef = useRef<HTMLDivElement>(null);
+  const interactPromptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let raf: number;
@@ -76,6 +77,15 @@ export function HUD({ state, look }: { state: GameState; look: React.MutableRefO
         if (boss) {
           if (bossNameRef.current) bossNameRef.current.textContent = boss.name;
           if (bossBarRef.current) bossBarRef.current.style.width = `${Math.max(0, (boss.hp / boss.maxHp) * 100)}%`;
+        }
+      }
+
+      if (interactPromptRef.current) {
+        if (state.interactPrompt) {
+          interactPromptRef.current.textContent = `[E] ${state.interactPrompt}`;
+          interactPromptRef.current.style.display = "block";
+        } else {
+          interactPromptRef.current.style.display = "none";
         }
       }
 
@@ -144,6 +154,22 @@ export function HUD({ state, look }: { state: GameState; look: React.MutableRefO
           display: "none",
           position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
           width: 5, height: 5, borderRadius: "50%", background: "rgba(232,224,212,0.7)",
+        }}
+      />
+
+      {/* Contextual "what does E do right now" prompt (2026-07-26) — replaces
+          having to guess from the static "E interact" legend above. Each
+          interactable system (Interactables/HearthNPCs/Flames/HearthGates/
+          FlaviannaEncounter) sets state.interactPrompt only while the player
+          is actually in range of something. */}
+      <div
+        ref={interactPromptRef}
+        style={{
+          display: "none",
+          position: "absolute", top: "58%", left: "50%", transform: "translateX(-50%)",
+          fontSize: 14, letterSpacing: 0.5, textAlign: "center", color: "#e8e0d4",
+          background: "rgba(5,5,10,0.6)", padding: "6px 14px", borderRadius: 4,
+          textShadow: "1px 1px 2px black",
         }}
       />
 

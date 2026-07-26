@@ -1,4 +1,5 @@
 import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
 import * as THREE from "three";
 import { restAtFlame, spawnFloatingText, type GameState } from "./GameState";
 import type { GameInput } from "./input";
@@ -22,19 +23,34 @@ export function Flames({ state, input, onInteract }: { state: GameState; input: 
   const spots = [state.mapData.ashenFlameSpawn, state.mapData.startFlameSpawn].filter(
     (s): s is { x: number; y: number } => !!s
   );
+  // See Interactables.tsx's comment on this pattern — only clears
+  // state.interactPrompt when this component was the one showing it.
+  const ownsPromptRef = useRef(false);
 
   useFrame(() => {
     if (state.paused || spots.length === 0) return;
-    if (!input.actions.current.interact) return;
     const p = state.player;
+    let inRange = false;
     for (const spot of spots) {
       const dx = spot.x + 0.5 - p.position.x;
       const dz = spot.y + 0.5 - p.position.z;
       if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
-        input.actions.current.interact = false;
-        onInteract();
-        return;
+        inRange = true;
+        break;
       }
+    }
+
+    if (inRange) {
+      state.interactPrompt = "Rest";
+      ownsPromptRef.current = true;
+    } else if (ownsPromptRef.current) {
+      state.interactPrompt = null;
+      ownsPromptRef.current = false;
+    }
+
+    if (inRange && input.actions.current.interact) {
+      input.actions.current.interact = false;
+      onInteract();
     }
   });
 
@@ -56,14 +72,24 @@ export function Flames({ state, input, onInteract }: { state: GameState; input: 
 // no boss fight required.
 export function LayerFlame({ state, input }: { state: GameState; input: GameInput }) {
   const spot = state.mapData.layerFlameSpawn;
+  const ownsPromptRef = useRef(false);
 
   useFrame(() => {
     if (state.paused || !spot) return;
-    if (!input.actions.current.interact) return;
     const p = state.player;
     const dx = spot.x + 0.5 - p.position.x;
     const dz = spot.y + 0.5 - p.position.z;
-    if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
+    const inRange = Math.hypot(dx, dz) <= INTERACT_RANGE;
+
+    if (inRange) {
+      state.interactPrompt = "Rest";
+      ownsPromptRef.current = true;
+    } else if (ownsPromptRef.current) {
+      state.interactPrompt = null;
+      ownsPromptRef.current = false;
+    }
+
+    if (inRange && input.actions.current.interact) {
       input.actions.current.interact = false;
       restAtFlame(state);
       spawnFloatingText(state, "Restored", p.position.clone().add(new THREE.Vector3(0, 2, 0)), "#ff8c00");

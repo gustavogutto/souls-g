@@ -1,9 +1,17 @@
 import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
 import type { GameState } from "./GameState";
 import { Area } from "./utils/constants";
 import type { GameInput } from "./input";
 
 const INTERACT_RANGE = 1.6;
+const NPC_PROMPT: Record<HearthNpcId, string> = {
+  martyna: "Talk to Martyna",
+  varn: "Talk to Varn",
+  tide_refused: "Talk to the Tide-Refused",
+  stash: "Open Stash",
+  flavianna: "Talk to Flavianna",
+};
 
 export type HearthNpcId = "martyna" | "varn" | "stash" | "tide_refused" | "flavianna";
 
@@ -54,20 +62,34 @@ function NPCFigure({ npc }: { npc: { id: HearthNpcId; x: number; y: number } }) 
 // chests/levers/gates.
 export function HearthNPCs({ state, input, onTalk }: { state: GameState; input: GameInput; onTalk: (npc: HearthNpcId) => void }) {
   const npcs = state.mapData.npcs?.filter((n) => isNpcVisible(n.id, state.progress));
+  // See Interactables.tsx's comment on this same pattern — only ever clears
+  // state.interactPrompt when THIS component was the one showing it.
+  const ownsPromptRef = useRef(false);
 
   useFrame(() => {
     if (!npcs || state.paused) return;
-    const pulse = input.actions.current.interact;
-    if (!pulse) return;
     const p = state.player;
+    let nearby: (typeof npcs)[number] | null = null;
     for (const npc of npcs) {
       const dx = npc.x + 0.5 - p.position.x;
       const dz = npc.y + 0.5 - p.position.z;
       if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
-        input.actions.current.interact = false;
-        onTalk(npc.id);
-        return;
+        nearby = npc;
+        break;
       }
+    }
+
+    if (nearby) {
+      state.interactPrompt = NPC_PROMPT[nearby.id];
+      ownsPromptRef.current = true;
+    } else if (ownsPromptRef.current) {
+      state.interactPrompt = null;
+      ownsPromptRef.current = false;
+    }
+
+    if (nearby && input.actions.current.interact) {
+      input.actions.current.interact = false;
+      onTalk(nearby.id);
     }
   });
 
