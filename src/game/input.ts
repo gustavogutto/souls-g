@@ -66,6 +66,8 @@ const KEY_AXIS_MAP: Record<string, keyof KeyboardAxes> = {
 };
 
 // Matches Hohenberg's real keybinds exactly: I light, J heavy, L bash, F heal.
+// Q used to be cast (now RMB, see onMouseDown below) — Q is block instead,
+// a held key (see the down/up handlers), so it isn't in this pulse map.
 const KEY_ACTION_MAP: Record<string, keyof ActionPulses> = {
   KeyI: "attackLight",
   KeyJ: "attackHeavy",
@@ -73,7 +75,6 @@ const KEY_ACTION_MAP: Record<string, keyof ActionPulses> = {
   Space: "roll",
   KeyF: "heal",
   KeyE: "interact",
-  KeyQ: "cast",
 };
 
 function clamp(v: number, min: number, max: number): number {
@@ -95,10 +96,15 @@ export function useGameInput() {
         actions.current[action] = true;
         e.preventDefault();
       }
+      if (e.code === "KeyQ") {
+        held.current.block = true;
+        e.preventDefault();
+      }
     };
     const up = (e: KeyboardEvent) => {
       const axis = KEY_AXIS_MAP[e.code];
       if (axis) axes.current[axis] = false;
+      if (e.code === "KeyQ") held.current.block = false;
     };
     const onMouseMove = (e: MouseEvent) => {
       if (!look.current.locked) return;

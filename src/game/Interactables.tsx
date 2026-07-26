@@ -157,58 +157,81 @@ export function Interactables({ state, input, onIllusoryWallRevealed }: { state:
     if (state.paused) return;
     const p = state.player;
     const pulse = input.actions.current.interact;
+    if (!pulse) return;
 
-    if (pulse) {
-      for (const chest of state.chests) {
-        if (chest.opened) continue;
-        const dx = chest.x + 0.5 - p.position.x;
-        const dz = chest.y + 0.5 - p.position.z;
+    // Only actually claim (clear) the pulse when something in THIS component
+    // was in range and triggered — otherwise this ran first (mount order in
+    // GameScene.tsx) and silently ate every E-press before HearthGates/
+    // HearthNPCs/FlaviannaEncounter/Flames ever got a chance to check it,
+    // even when nothing here was nearby at all.
+    let consumed = false;
+
+    for (const chest of state.chests) {
+      if (chest.opened) continue;
+      const dx = chest.x + 0.5 - p.position.x;
+      const dz = chest.y + 0.5 - p.position.z;
+      if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
+        openChest(state, chest);
+        consumed = true;
+        break;
+      }
+    }
+    const sf = state.secretFight;
+    if (sf && !sf.triggered) {
+      const dx = sf.leverX + 0.5 - p.position.x;
+      const dz = sf.leverY + 0.5 - p.position.z;
+      if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
+        triggerSecretFight(state);
+        consumed = true;
+      }
+    }
+    const fa = state.mapData.fallenAdventurerSpawn;
+    if (fa && !state.fallenAdventurerLooted) {
+      const dx = fa.x + 0.5 - p.position.x;
+      const dz = fa.y + 0.5 - p.position.z;
+      if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
+        lootFallenAdventurer(state);
+        consumed = true;
+      }
+    }
+    const v = state.mapData.vaultSpawn;
+    if (v) {
+      if (!state.vaultLeverPulled) {
+        const dx = v.leverX + 0.5 - p.position.x;
+        const dz = v.leverY + 0.5 - p.position.z;
         if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
-          openChest(state, chest);
-          break;
+          pullVaultLever(state);
+          consumed = true;
+        }
+      } else if (!state.vaultOpened) {
+        const dx = v.chestX + 0.5 - p.position.x;
+        const dz = v.chestY + 0.5 - p.position.z;
+        if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
+          openVault(state);
+          consumed = true;
         }
       }
-      const sf = state.secretFight;
-      if (sf && !sf.triggered) {
-        const dx = sf.leverX + 0.5 - p.position.x;
-        const dz = sf.leverY + 0.5 - p.position.z;
-        if (Math.hypot(dx, dz) <= INTERACT_RANGE) triggerSecretFight(state);
+    }
+    const iw = state.mapData.illusoryWallSpawn;
+    if (iw && !state.illusoryWallOpened) {
+      const dx = iw.fromX + 0.5 - p.position.x;
+      const dz = iw.fromY + 0.5 - p.position.z;
+      if (Math.hypot(dx, dz) <= INTERACT_RANGE && openIllusoryWall(state)) {
+        onIllusoryWallRevealed?.();
+        consumed = true;
       }
-      const fa = state.mapData.fallenAdventurerSpawn;
-      if (fa && !state.fallenAdventurerLooted) {
-        const dx = fa.x + 0.5 - p.position.x;
-        const dz = fa.y + 0.5 - p.position.z;
-        if (Math.hypot(dx, dz) <= INTERACT_RANGE) lootFallenAdventurer(state);
-      }
-      const v = state.mapData.vaultSpawn;
-      if (v) {
-        if (!state.vaultLeverPulled) {
-          const dx = v.leverX + 0.5 - p.position.x;
-          const dz = v.leverY + 0.5 - p.position.z;
-          if (Math.hypot(dx, dz) <= INTERACT_RANGE) pullVaultLever(state);
-        } else if (!state.vaultOpened) {
-          const dx = v.chestX + 0.5 - p.position.x;
-          const dz = v.chestY + 0.5 - p.position.z;
-          if (Math.hypot(dx, dz) <= INTERACT_RANGE) openVault(state);
-        }
-      }
-      const iw = state.mapData.illusoryWallSpawn;
-      if (iw && !state.illusoryWallOpened) {
-        const dx = iw.fromX + 0.5 - p.position.x;
-        const dz = iw.fromY + 0.5 - p.position.z;
-        if (Math.hypot(dx, dz) <= INTERACT_RANGE && openIllusoryWall(state)) {
-          onIllusoryWallRevealed?.();
-        }
-      }
-      const sd = state.mapData.shortcutDoorSpawn;
-      if (sd && !state.shortcutDoorOpened) {
-        const dx = sd.openFromX + 0.5 - p.position.x;
-        const dz = sd.openFromY + 0.5 - p.position.z;
-        if (Math.hypot(dx, dz) <= INTERACT_RANGE) openShortcutDoor(state);
+    }
+    const sd = state.mapData.shortcutDoorSpawn;
+    if (sd && !state.shortcutDoorOpened) {
+      const dx = sd.openFromX + 0.5 - p.position.x;
+      const dz = sd.openFromY + 0.5 - p.position.z;
+      if (Math.hypot(dx, dz) <= INTERACT_RANGE) {
+        openShortcutDoor(state);
+        consumed = true;
       }
     }
 
-    input.actions.current.interact = false;
+    if (consumed) input.actions.current.interact = false;
   });
 
   return (
