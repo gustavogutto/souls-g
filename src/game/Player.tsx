@@ -132,7 +132,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
     }
     actions.roll = false;
 
-    // Cast (spell) — Q, one-shot pulse. FP is spent up front at windup
+    // Cast (spell) — RMB, one-shot pulse. FP is spent up front at windup
     // start (see the roll block above for the cancel/refund rule). Only
     // "projectile" spells are wired up yet (Ashmote/Hearthlance/Moonfrost
     // Lance/Stonefall) — ground_aoe/ground_hazard/buff_rune/beam spells
