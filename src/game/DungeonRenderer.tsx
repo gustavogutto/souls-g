@@ -12,7 +12,11 @@ import type { AreaTheme } from "./utils/areaThemes";
 // vast majority of a generated grid is untouched interior "wall" and would
 // otherwise be thousands of invisible boxes.
 
-const WALL_HEIGHT = 3;
+// Must clear the orbit camera's own max height or its top face becomes
+// visible at shallow pitch/max zoom-out (CameraRig: lookAt.y 1.3 + up to
+// ~11.5 distance * sin(20° min pitch) ≈ 5.2 worst case) — 3 was already
+// below that, which is why walls looked "see-through" from above.
+const WALL_HEIGHT = 8;
 
 function tileColors(theme: AreaTheme): Record<TileData["type"], THREE.Color> {
   return {
