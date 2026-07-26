@@ -33,6 +33,9 @@ import { PauseMenu } from "./PauseMenu";
 import { Minimap } from "./Minimap";
 
 const AUTOSAVE_INTERVAL_MS = 5000;
+// See the lighting comment at the <Canvas> lights below — compensates for
+// three.js removing legacy-lights PI-normalization around r155.
+const LIGHT_INTENSITY_SCALE = Math.PI;
 
 // The corridor tile connecting the boss room to the end room — solid for as
 // long as GameState.gateLocked is true (see collision.ts's isGateBlocked),
@@ -228,9 +231,25 @@ function Floor1Gameplay({
       <Canvas shadows dpr={1} camera={{ fov: 45, near: 0.1, far: 200 }}>
         <color attach="background" args={[theme.background]} />
         <fog attach="fog" args={[theme.fogColor, theme.fogNear, theme.fogFar]} />
-        <ambientLight intensity={theme.ambientIntensity} color={theme.ambientColor} />
-        <directionalLight position={[8, 14, 6]} intensity={theme.sunIntensity} color={theme.sunColor} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-        <pointLight position={[0, 6, 0]} intensity={0.4} color={theme.special} />
+        {/* All light intensities below are scaled by LIGHT_INTENSITY_SCALE (~pi).
+            three.js removed the old "legacy lights" PI-normalization around r155
+            (this project is on 0.185.1) — every light in the scene now renders
+            about 3x dimmer than the same intensity number used to under the old
+            default. Theme intensities (ambientIntensity/sunIntensity, all small
+            "legacy-style" round numbers like 0.4-1.5) were never rescaled for
+            that change, so any surface relying only on ambient (a wall facing
+            away from the single directional light) reads as near-flat-black —
+            reported repeatedly as "the wall looks broken" before this fix. */}
+        <ambientLight intensity={theme.ambientIntensity * LIGHT_INTENSITY_SCALE} color={theme.ambientColor} />
+        <directionalLight
+          position={[8, 14, 6]}
+          intensity={theme.sunIntensity * LIGHT_INTENSITY_SCALE}
+          color={theme.sunColor}
+          castShadow
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+        />
+        <pointLight position={[0, 6, 0]} intensity={0.4 * LIGHT_INTENSITY_SCALE} color={theme.special} />
 
         <group ref={dungeonGroupRef}>
           <DungeonRenderer mapData={mapData} theme={theme} revealVersion={wallRevealVersion} />
