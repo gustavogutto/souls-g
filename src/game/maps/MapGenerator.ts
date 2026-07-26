@@ -117,17 +117,23 @@ export interface FloorArchetype {
   mainRoomCountRange: [number, number];
   mainRoomSizeRange: [number, number];
   deadEndCount: number;
-  corridorWidth: 1 | 2 | 3;
+  corridorWidth: 1 | 2 | 3 | 4 | 5;
   pathJitter: number;
   loopChance: number;
 }
 
+// Tuned for the tripled AREA_CONFIGS.mapSize values (user request 2026-07-26:
+// maps felt "too tight"). Room count/size and corridor width all scale up
+// too, not just the raw grid — otherwise tripling width/height alone just
+// stretches the same few rooms across 9x the area with long empty corridors
+// between them. Warrens stays relatively the tightest/maziest of the five
+// (smallest corridorWidth, most rooms, highest pathJitter) by design.
 export const FLOOR_ARCHETYPES: FloorArchetype[] = [
-  { name: "Threshold", mainRoomCountRange: [4, 5], mainRoomSizeRange: [5, 6], deadEndCount: 3, corridorWidth: 3, pathJitter: 3, loopChance: 0 },
-  { name: "Warrens", mainRoomCountRange: [9, 11], mainRoomSizeRange: [3, 5], deadEndCount: 6, corridorWidth: 2, pathJitter: 13, loopChance: 0.2 },
-  { name: "Galleries", mainRoomCountRange: [4, 5], mainRoomSizeRange: [8, 9], deadEndCount: 3, corridorWidth: 3, pathJitter: 6, loopChance: 0 },
-  { name: "Ring", mainRoomCountRange: [6, 7], mainRoomSizeRange: [5, 6], deadEndCount: 3, corridorWidth: 3, pathJitter: 7, loopChance: 1 },
-  { name: "Gauntlet", mainRoomCountRange: [3, 4], mainRoomSizeRange: [5, 6], deadEndCount: 2, corridorWidth: 3, pathJitter: 2, loopChance: 0 },
+  { name: "Threshold", mainRoomCountRange: [6, 7], mainRoomSizeRange: [9, 11], deadEndCount: 5, corridorWidth: 5, pathJitter: 8, loopChance: 0 },
+  { name: "Warrens", mainRoomCountRange: [13, 15], mainRoomSizeRange: [5, 8], deadEndCount: 9, corridorWidth: 4, pathJitter: 30, loopChance: 0.2 },
+  { name: "Galleries", mainRoomCountRange: [6, 7], mainRoomSizeRange: [14, 16], deadEndCount: 5, corridorWidth: 5, pathJitter: 15, loopChance: 0 },
+  { name: "Ring", mainRoomCountRange: [9, 10], mainRoomSizeRange: [9, 11], deadEndCount: 5, corridorWidth: 5, pathJitter: 18, loopChance: 1 },
+  { name: "Gauntlet", mainRoomCountRange: [5, 6], mainRoomSizeRange: [9, 11], deadEndCount: 3, corridorWidth: 5, pathJitter: 5, loopChance: 0 },
 ];
 
 export const FLOOR_SEQUENCE: Floor[] = [Floor.BASEMENT, Floor.GROUND, Floor.SECOND, Floor.THIRD, Floor.TOP];
