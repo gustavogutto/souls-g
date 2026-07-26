@@ -7,7 +7,7 @@ import { applyDamageReduction } from "./utils/equipment";
 import { resolveCollision } from "./maps/collision";
 import { bossMovesForType, bossVisualForType, BOSS_COMBAT, TIDEWARDEN_GRAB_TRIGGER_RANGE, TIDEWARDEN_HEAL_PUNISH_WINDOW_MS, type BossMove } from "./utils/bossData";
 import { PROJECTILE_EFFECT_BY_TYPE } from "./utils/statusEffects";
-import { BLOCK_DAMAGE_REDUCTION, clampDt } from "./gameConstants";
+import { BLOCK_DAMAGE_REDUCTION } from "./gameConstants";
 
 export const BOSS_RADIUS = 0.9;
 
@@ -165,8 +165,7 @@ export function Boss({ state, bossState }: { state: GameState; bossState: BossSt
   const bodyRef = useRef<Mesh>(null!);
   const telegraphRef = useRef<Mesh>(null!);
 
-  useFrame((_, rawDt) => {
-    const dt = clampDt(rawDt);
+  useFrame((_, dt) => {
     const boss = bossState;
     if (boss.aiState === "dead") {
       groupRef.current.visible = false;

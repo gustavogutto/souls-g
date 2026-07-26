@@ -26,7 +26,6 @@ import {
   ATTACK_HIT_DELAY_MS,
   MELEE_LUNGE_DISTANCE,
   RESPAWN_DELAY_MS,
-  clampDt,
   type MeleeAction,
 } from "./gameConstants";
 import { isGateBlocked, isShortcutDoorBlocked, resolveCollision } from "./maps/collision";
@@ -41,8 +40,7 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
   const { camera } = useThree();
   const aimDirRef = useRef(new THREE.Vector3(0, 0, 1));
 
-  useFrame((_, rawDt) => {
-    const dt = clampDt(rawDt);
+  useFrame((_, dt) => {
     const p = state.player;
     if (state.paused) return;
     if (p.dead) {

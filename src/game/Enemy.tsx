@@ -28,7 +28,7 @@ import { PROJECTILE_EFFECT_BY_TYPE } from "./utils/statusEffects";
 import { hasLineOfSight } from "./utils/lineOfSight";
 import { isWallTile, resolveCollision } from "./maps/collision";
 import { findPath } from "./maps/pathfinding";
-import { BLOCK_DAMAGE_REDUCTION, clampDt } from "./gameConstants";
+import { BLOCK_DAMAGE_REDUCTION } from "./gameConstants";
 
 export const ENEMY_RADIUS = 0.4;
 const REPATH_INTERVAL_MS = 500;
@@ -297,8 +297,7 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
   const bodyRef = useRef<Mesh>(null!);
   const telegraphRef = useRef<Mesh>(null!);
 
-  useFrame((_, rawDt) => {
-    const dt = clampDt(rawDt);
+  useFrame((_, dt) => {
     const e = enemyState;
     const p = state.player;
     if (e.aiState === "dead") {
