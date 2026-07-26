@@ -14,25 +14,41 @@ const HOMING_HALF_ANGLE = (60 * Math.PI) / 180;
 // Weak steering toward the nearest living enemy inside the projectile's
 // forward detection cone, capped at homingDegPerSec of turn per second —
 // Ashmote's signature (design doc: "90 deg/sec turn, 6-unit cone").
+// Same fix as Enemy.tsx's toPlayer change: this scans every enemy on the
+// floor every frame for every in-flight homing projectile, and used to
+// allocate a fresh Vector3 per enemy checked — now plain numbers, same
+// distance/dot/lerp math, no allocation. Enemy counts scale with the bigger
+// maps, so this loop's cost (and garbage) scaled right along with them.
 function applyHoming(proj: { position: THREE.Vector3; dir: THREE.Vector3; homingDegPerSec?: number }, state: GameState, dt: number) {
   if (!proj.homingDegPerSec) return;
-  let best: THREE.Vector3 | null = null;
+  let bestX = 0, bestY = 0, bestZ = 0;
+  let found = false;
   let bestDist = HOMING_RANGE;
   for (const enemy of state.enemies) {
     if (enemy.aiState === "dead") continue;
-    const to = new THREE.Vector3().subVectors(enemy.position, proj.position);
-    const dist = to.length();
-    if (dist > bestDist) continue;
-    to.normalize();
-    if (proj.dir.dot(to) < Math.cos(HOMING_HALF_ANGLE)) continue;
+    const dx = enemy.position.x - proj.position.x;
+    const dy = enemy.position.y - proj.position.y;
+    const dz = enemy.position.z - proj.position.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (dist > bestDist || dist < 1e-4) continue;
+    const inv = 1 / dist;
+    const nx = dx * inv, ny = dy * inv, nz = dz * inv;
+    if (proj.dir.x * nx + proj.dir.y * ny + proj.dir.z * nz < Math.cos(HOMING_HALF_ANGLE)) continue;
     bestDist = dist;
-    best = to;
+    bestX = nx; bestY = ny; bestZ = nz;
+    found = true;
   }
-  if (!best) return;
+  if (!found) return;
   const maxTurn = (proj.homingDegPerSec * Math.PI) / 180 * dt;
-  const angle = proj.dir.angleTo(best);
+  const dot = THREE.MathUtils.clamp(proj.dir.x * bestX + proj.dir.y * bestY + proj.dir.z * bestZ, -1, 1);
+  const angle = Math.acos(dot);
   if (angle < 1e-4) return;
-  proj.dir.lerp(best, Math.min(1, maxTurn / angle)).normalize();
+  const t = Math.min(1, maxTurn / angle);
+  proj.dir.set(
+    THREE.MathUtils.lerp(proj.dir.x, bestX, t),
+    THREE.MathUtils.lerp(proj.dir.y, bestY, t),
+    THREE.MathUtils.lerp(proj.dir.z, bestZ, t)
+  ).normalize();
 }
 
 // A fixed pool of always-mounted meshes (matching Hohenberg's own

@@ -311,8 +311,16 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
     if (e.hitFlashMs > 0) e.hitFlashMs = Math.max(0, e.hitFlashMs - dtMs);
     tickChill(e, dtMs);
 
-    const toPlayer = new THREE.Vector3().subVectors(p.position, e.position);
-    const dist = toPlayer.length();
+    // Plain numbers, not a THREE.Vector3 — this runs unconditionally for every
+    // enemy on the floor every frame (even idle, off-screen ones), and floor
+    // enemy counts now scale with the bigger 2026-07-26 maps (2-3 per room
+    // across many more rooms, plus wolves/archers/toads/etc on top). A fresh
+    // Vector3 per enemy per frame at that count was real, constant GC
+    // pressure that scaled directly with map size, on top of the pathfinding
+    // GC bug already fixed earlier this session.
+    const toPlayerX = p.position.x - e.position.x;
+    const toPlayerZ = p.position.z - e.position.z;
+    const dist = Math.hypot(toPlayerX, toPlayerZ);
 
     if (e.stunnedMs > 0) {
       e.stunnedMs = Math.max(0, e.stunnedMs - dtMs);
@@ -419,7 +427,7 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
 
     groupRef.current.visible = true;
     groupRef.current.position.set(e.position.x, 0, e.position.z);
-    if (dist > 0.01) groupRef.current.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+    if (dist > 0.01) groupRef.current.rotation.y = Math.atan2(toPlayerX, toPlayerZ);
 
     const mat = bodyRef.current.material as THREE.MeshStandardMaterial;
     if (e.hitFlashMs > 0) mat.emissive.setHex(0xffffff);
