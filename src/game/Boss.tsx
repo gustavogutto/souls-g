@@ -256,7 +256,7 @@ export function Boss({ state, bossState }: { state: GameState; bossState: BossSt
 
   return (
     <group ref={groupRef} position={[bossState.position.x, 0, bossState.position.z]}>
-      <mesh ref={bodyRef} position={[0, 1.5, 0]} castShadow>
+      <mesh ref={bodyRef} position={[0, 1.5, 0]}>
         <capsuleGeometry args={[0.9, 1.6, 4, 8]} />
         <meshStandardMaterial color={tintColor} emissive="#000000" />
       </mesh>

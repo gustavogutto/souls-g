@@ -7,7 +7,7 @@ const INTERACT_RANGE = 1.5;
 
 function FlameProp({ x, y }: { x: number; y: number }) {
   return (
-    <mesh position={[x + 0.5, 0.5, y + 0.5]} castShadow>
+    <mesh position={[x + 0.5, 0.5, y + 0.5]}>
       <coneGeometry args={[0.25, 0.9, 8]} />
       <meshStandardMaterial color="#ff8c00" emissive="#ff6600" emissiveIntensity={0.9} />
     </mesh>

@@ -377,12 +377,12 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
 
   return (
     <group ref={groupRef}>
-      <mesh ref={bodyRef} position={[0, 0.9, 0]} castShadow>
+      <mesh ref={bodyRef} position={[0, 0.9, 0]}>
         <capsuleGeometry args={[0.45, 0.9, 4, 8]} />
         <meshStandardMaterial color="#c9a84c" emissive="#000000" />
       </mesh>
       {/* Facing wedge — a small nose so the player's orientation reads clearly */}
-      <mesh position={[0, 0.9, 0.55]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+      <mesh position={[0, 0.9, 0.55]} rotation={[Math.PI / 2, 0, 0]}>
         <coneGeometry args={[0.15, 0.4, 8]} />
         <meshStandardMaterial color="#ffe08a" />
       </mesh>

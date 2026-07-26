@@ -50,7 +50,7 @@ function BossGateDoor({ state }: { state: GameState }) {
 
   if (!door) return null;
   return (
-    <mesh ref={ref} position={[door.x + 0.5, 1.2, door.y + 0.5]} castShadow>
+    <mesh ref={ref} position={[door.x + 0.5, 1.2, door.y + 0.5]}>
       <boxGeometry args={[1, 2.4, 1]} />
       <meshStandardMaterial color="#661a1a" emissive="#440000" emissiveIntensity={0.3} />
     </mesh>
@@ -228,7 +228,17 @@ function Floor1Gameplay({
           confirmed separately: cutting enemies 96->24 didn't move this at all).
           Capping dpr at 1 trades some supersampling sharpness for directly
           undoing that multiplier. */}
-      <Canvas shadows dpr={1} camera={{ fov: 45, near: 0.1, far: 200 }}>
+      {/* Shadows removed entirely (2026-07-26): every enemy (up to 24/floor),
+          the boss, player, every interactable/NPC, and the merged dungeon
+          mesh all had castShadow set, meaning all of it got rendered a SECOND
+          time every frame for the shadow depth pass, plus per-fragment shadow
+          map sampling in the main pass. On top of that, the directional
+          light's shadow camera never followed the player and used three's
+          default (small, fixed near world origin) frustum — on maps now up
+          to 315 units across, shadows were almost certainly not rendering
+          correctly most of the time anyway. Paying real GPU cost for a
+          feature that mostly wasn't working. */}
+      <Canvas dpr={1} camera={{ fov: 45, near: 0.1, far: 200 }}>
         <color attach="background" args={[theme.background]} />
         <fog attach="fog" args={[theme.fogColor, theme.fogNear, theme.fogFar]} />
         {/* All light intensities below are scaled by LIGHT_INTENSITY_SCALE (~pi).
@@ -245,9 +255,6 @@ function Floor1Gameplay({
           position={[8, 14, 6]}
           intensity={theme.sunIntensity * LIGHT_INTENSITY_SCALE}
           color={theme.sunColor}
-          castShadow
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
         />
         <pointLight position={[0, 6, 0]} intensity={0.4 * LIGHT_INTENSITY_SCALE} color={theme.special} />
 

@@ -444,7 +444,7 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
 
   return (
     <group ref={groupRef} position={[enemyState.position.x, 0, enemyState.position.z]}>
-      <mesh ref={bodyRef} position={[0, 0.9 * size, 0]} castShadow>
+      <mesh ref={bodyRef} position={[0, 0.9 * size, 0]}>
         <capsuleGeometry args={[0.4 * size, 0.8 * size, 4, 8]} />
         <meshStandardMaterial color={colorForRole(enemyState.role)} emissive="#000000" />
       </mesh>

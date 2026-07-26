@@ -18,7 +18,7 @@ function Chest({ chest }: { chest: ChestState }) {
   });
 
   return (
-    <mesh ref={meshRef} position={[chest.x + 0.5, 0.35, chest.y + 0.5]} castShadow>
+    <mesh ref={meshRef} position={[chest.x + 0.5, 0.35, chest.y + 0.5]}>
       <boxGeometry args={[0.7, 0.7, 0.7]} />
       <meshStandardMaterial color="#c9a84c" emissive="#553311" emissiveIntensity={0.3} />
     </mesh>
@@ -34,7 +34,7 @@ function FallenAdventurer({ state }: { state: GameState }) {
 
   const fa = state.mapData.fallenAdventurerSpawn!;
   return (
-    <mesh ref={meshRef} position={[fa.x + 0.5, 0.12, fa.y + 0.5]} rotation={[0, Math.random() * Math.PI, 0]} castShadow>
+    <mesh ref={meshRef} position={[fa.x + 0.5, 0.12, fa.y + 0.5]} rotation={[0, Math.random() * Math.PI, 0]}>
       <boxGeometry args={[1.1, 0.24, 0.4]} />
       <meshStandardMaterial color="#4a4238" />
     </mesh>
@@ -53,7 +53,7 @@ function Crate({ state, x, y }: { state: GameState; x: number; y: number }) {
   });
 
   return (
-    <mesh ref={meshRef} position={[x + 0.5, 0.3, y + 0.5]} castShadow>
+    <mesh ref={meshRef} position={[x + 0.5, 0.3, y + 0.5]}>
       <boxGeometry args={[0.55, 0.55, 0.55]} />
       <meshStandardMaterial color="#8a6a3a" />
     </mesh>
@@ -69,7 +69,7 @@ function Lever({ state }: { state: GameState }) {
   });
 
   return (
-    <mesh ref={meshRef} position={[sf.leverX + 0.5, 0.6, sf.leverY + 0.5]} castShadow>
+    <mesh ref={meshRef} position={[sf.leverX + 0.5, 0.6, sf.leverY + 0.5]}>
       <cylinderGeometry args={[0.12, 0.12, 1.2, 8]} />
       <meshStandardMaterial color="#8844ff" emissive="#441188" emissiveIntensity={0.6} />
     </mesh>
@@ -92,7 +92,7 @@ function VaultLever({ state }: { state: GameState }) {
   });
 
   return (
-    <mesh ref={meshRef} position={[v.leverX + 0.5, 0.6, v.leverY + 0.5]} castShadow>
+    <mesh ref={meshRef} position={[v.leverX + 0.5, 0.6, v.leverY + 0.5]}>
       <cylinderGeometry args={[0.12, 0.12, 1.2, 8]} />
       <meshStandardMaterial color="#8a8a8a" />
     </mesh>
@@ -119,7 +119,7 @@ function VaultChest({ state }: { state: GameState }) {
   });
 
   return (
-    <mesh ref={meshRef} position={[v.chestX + 0.5, 0.35, v.chestY + 0.5]} castShadow>
+    <mesh ref={meshRef} position={[v.chestX + 0.5, 0.35, v.chestY + 0.5]}>
       <boxGeometry args={[0.7, 0.7, 0.7]} />
       <meshStandardMaterial color="#6a3fa0" transparent opacity={0.55} />
     </mesh>
@@ -140,7 +140,7 @@ function ShortcutDoorPanel({ x, y, state }: { x: number; y: number; state: GameS
   });
 
   return (
-    <mesh ref={meshRef} position={[x + 0.5, 1.2, y + 0.5]} castShadow>
+    <mesh ref={meshRef} position={[x + 0.5, 1.2, y + 0.5]}>
       <boxGeometry args={[1, 2.4, 1]} />
       <meshStandardMaterial color="#4a3a5a" emissive="#2a1a3a" emissiveIntensity={0.3} />
     </mesh>

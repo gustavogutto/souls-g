@@ -25,11 +25,11 @@ function Gate({ gate }: { gate: { x: number; y: number; area: Area; label: strin
 
   return (
     <group position={[gate.x + 0.5, 0, gate.y + 0.5]}>
-      <mesh castShadow>
+      <mesh>
         <cylinderGeometry args={[0.35, 0.45, 2.2, 8]} />
         <meshStandardMaterial color="#3a3a4a" />
       </mesh>
-      <mesh ref={ref} castShadow>
+      <mesh ref={ref}>
         <icosahedronGeometry args={[0.3, 0]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.7} />
       </mesh>

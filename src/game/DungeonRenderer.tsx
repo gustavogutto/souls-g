@@ -99,14 +99,14 @@ export function DungeonRenderer({ mapData, theme, revealVersion }: { mapData: Ma
 
   return (
     <group>
-      <mesh geometry={floorGeometry} receiveShadow>
+      <mesh geometry={floorGeometry}>
         <meshStandardMaterial vertexColors roughness={0.9} />
       </mesh>
-      <mesh geometry={wallGeometry} castShadow receiveShadow>
+      <mesh geometry={wallGeometry}>
         <meshStandardMaterial vertexColors roughness={0.8} />
       </mesh>
       {mapData.propSpawns.map((p, i) => (
-        <mesh key={i} position={[p.x + 0.5, 0.5, p.y + 0.5]} castShadow>
+        <mesh key={i} position={[p.x + 0.5, 0.5, p.y + 0.5]}>
           <boxGeometry args={[0.4, 1, 0.4]} />
           <meshStandardMaterial color="#5a4a3a" />
         </mesh>

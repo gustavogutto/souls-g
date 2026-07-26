@@ -26,7 +26,7 @@ export function FlaviannaEncounter({ state, input, onTalk }: { state: GameState;
   if (!spawn || state.progress.flaviannaMet) return null;
   return (
     <group position={[spawn.x + 0.5, 0, spawn.y + 0.5]}>
-      <mesh position={[0, 0.9, 0]} castShadow>
+      <mesh position={[0, 0.9, 0]}>
         <capsuleGeometry args={[0.4, 0.9, 4, 8]} />
         <meshStandardMaterial color="#aa44cc" emissive="#aa44cc" emissiveIntensity={0.15} />
       </mesh>

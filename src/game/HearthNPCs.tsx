@@ -32,7 +32,7 @@ function NPCFigure({ npc }: { npc: { id: HearthNpcId; x: number; y: number } }) 
   if (npc.id === "stash") {
     return (
       <group position={[npc.x + 0.5, 0, npc.y + 0.5]}>
-        <mesh position={[0, 0.35, 0]} castShadow>
+        <mesh position={[0, 0.35, 0]}>
           <boxGeometry args={[0.8, 0.7, 0.5]} />
           <meshStandardMaterial color={color} />
         </mesh>
@@ -41,7 +41,7 @@ function NPCFigure({ npc }: { npc: { id: HearthNpcId; x: number; y: number } }) 
   }
   return (
     <group position={[npc.x + 0.5, 0, npc.y + 0.5]}>
-      <mesh position={[0, 0.9, 0]} castShadow>
+      <mesh position={[0, 0.9, 0]}>
         <capsuleGeometry args={[0.4, 0.9, 4, 8]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.15} />
       </mesh>
