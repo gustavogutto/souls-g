@@ -117,23 +117,26 @@ export interface FloorArchetype {
   mainRoomCountRange: [number, number];
   mainRoomSizeRange: [number, number];
   deadEndCount: number;
-  corridorWidth: 1 | 2 | 3 | 4 | 5;
+  corridorWidth: number; // no longer capped at 3 — widened further 2026-07-26, see below
   pathJitter: number;
   loopChance: number;
 }
 
-// Tuned for the tripled AREA_CONFIGS.mapSize values (user request 2026-07-26:
-// maps felt "too tight"). Room count/size and corridor width all scale up
-// too, not just the raw grid — otherwise tripling width/height alone just
-// stretches the same few rooms across 9x the area with long empty corridors
-// between them. Warrens stays relatively the tightest/maziest of the five
-// (smallest corridorWidth, most rooms, highest pathJitter) by design.
+// Tuned for AREA_CONFIGS.mapSize (user request 2026-07-26, revised same day
+// after "still too small"): maps felt too tight even after an initial 3x
+// pass, so this is a second, bigger jump on top of that first one — roughly
+// another 1.5x on room count/size/corridor width/jitter, plus mapSize itself
+// grew further (see constants.ts). Room count/size scale with corridor width
+// too, not just the raw grid — otherwise a wider map just stretches the same
+// few rooms across more empty corridor. Warrens stays relatively the
+// tightest/maziest of the five (smallest corridorWidth, most rooms, highest
+// pathJitter) by design.
 export const FLOOR_ARCHETYPES: FloorArchetype[] = [
-  { name: "Threshold", mainRoomCountRange: [6, 7], mainRoomSizeRange: [9, 11], deadEndCount: 5, corridorWidth: 5, pathJitter: 8, loopChance: 0 },
-  { name: "Warrens", mainRoomCountRange: [13, 15], mainRoomSizeRange: [5, 8], deadEndCount: 9, corridorWidth: 4, pathJitter: 30, loopChance: 0.2 },
-  { name: "Galleries", mainRoomCountRange: [6, 7], mainRoomSizeRange: [14, 16], deadEndCount: 5, corridorWidth: 5, pathJitter: 15, loopChance: 0 },
-  { name: "Ring", mainRoomCountRange: [9, 10], mainRoomSizeRange: [9, 11], deadEndCount: 5, corridorWidth: 5, pathJitter: 18, loopChance: 1 },
-  { name: "Gauntlet", mainRoomCountRange: [5, 6], mainRoomSizeRange: [9, 11], deadEndCount: 3, corridorWidth: 5, pathJitter: 5, loopChance: 0 },
+  { name: "Threshold", mainRoomCountRange: [8, 9], mainRoomSizeRange: [13, 16], deadEndCount: 7, corridorWidth: 8, pathJitter: 14, loopChance: 0 },
+  { name: "Warrens", mainRoomCountRange: [17, 19], mainRoomSizeRange: [7, 11], deadEndCount: 12, corridorWidth: 6, pathJitter: 45, loopChance: 0.2 },
+  { name: "Galleries", mainRoomCountRange: [8, 9], mainRoomSizeRange: [20, 23], deadEndCount: 7, corridorWidth: 8, pathJitter: 22, loopChance: 0 },
+  { name: "Ring", mainRoomCountRange: [12, 13], mainRoomSizeRange: [13, 16], deadEndCount: 7, corridorWidth: 8, pathJitter: 27, loopChance: 1 },
+  { name: "Gauntlet", mainRoomCountRange: [7, 8], mainRoomSizeRange: [13, 16], deadEndCount: 4, corridorWidth: 8, pathJitter: 8, loopChance: 0 },
 ];
 
 export const FLOOR_SEQUENCE: Floor[] = [Floor.BASEMENT, Floor.GROUND, Floor.SECOND, Floor.THIRD, Floor.TOP];
@@ -302,8 +305,11 @@ function generateLabyrinth(
   let bossRoom: Room | undefined;
   if (hasBoss) {
     const isDragonArena = area === Area.AREA_5;
-    const bossW = isDragonArena ? 18 : 10;
-    const bossH = isDragonArena ? 16 : 9;
+    // Scaled up alongside the 2026-07-26 map-size pass — these were fixed
+    // absolute tile sizes, so they'd otherwise stay tiny relative to a much
+    // bigger surrounding floor.
+    const bossW = isDragonArena ? 30 : 17;
+    const bossH = isDragonArena ? 26 : 15;
     const bossX = width - bossW - 12;
     const bossY = 3;
     bossRoom = { x: bossX, y: bossY, w: bossW, h: bossH, tag: "boss", center: { x: bossX + Math.floor(bossW / 2), y: bossY + Math.floor(bossH / 2) } };
