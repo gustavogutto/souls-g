@@ -67,3 +67,21 @@ export const BLOCK_MOVE_SPEED_MULT = 0.5;
 // floor's checkpoint (see GameState.respawnAtCheckpoint) — no button, no
 // manual refresh, matching every Souls game's own death loop.
 export const RESPAWN_DELAY_MS = 2600;
+
+// Every wall check in this game (player/enemy/boss resolveCollision, the
+// enemy/boss lunge point-checks, the projectile isWallTile check) is a
+// discrete end-of-step test against wherever an entity/projectile lands
+// that frame — none of them sweep the path travelled during the frame. That's
+// fine at a steady 60fps (nothing moves more than a fraction of a tile per
+// frame) but a single hitch (GC pause, floor-load rebuild, tab switch) hands
+// every useFrame callback one huge raw dt for that frame, and a fast mover
+// can land clean on the far side of a 1-unit wall without ever landing a
+// sample point inside it. Capping dt bounds every frame's travel distance
+// regardless of how long the frame actually took — worst case, the fastest
+// player spell (13u/s) travels 13 * MAX_DT ≈ 0.43 units, safely under one
+// wall's thickness. A hitch now reads as brief slow motion instead of
+// tunneling.
+export const MAX_DT = 1 / 30;
+export function clampDt(dt: number): number {
+  return Math.min(dt, MAX_DT);
+}

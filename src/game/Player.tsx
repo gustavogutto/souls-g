@@ -26,13 +26,14 @@ import {
   ATTACK_HIT_DELAY_MS,
   MELEE_LUNGE_DISTANCE,
   RESPAWN_DELAY_MS,
+  clampDt,
   type MeleeAction,
 } from "./gameConstants";
 import { isGateBlocked, isShortcutDoorBlocked, resolveCollision } from "./maps/collision";
 import type { GameInput } from "./input";
 
 const ATTACK_ARC_COS = Math.cos((70 * Math.PI) / 180); // +/-70 deg frontal cone
-const PLAYER_RADIUS = 0.35;
+export const PLAYER_RADIUS = 0.35;
 
 export function Player({ state, input }: { state: GameState; input: GameInput }) {
   const groupRef = useRef<Group>(null!);
@@ -40,7 +41,8 @@ export function Player({ state, input }: { state: GameState; input: GameInput })
   const { camera } = useThree();
   const aimDirRef = useRef(new THREE.Vector3(0, 0, 1));
 
-  useFrame((_, dt) => {
+  useFrame((_, rawDt) => {
+    const dt = clampDt(rawDt);
     const p = state.player;
     if (state.paused) return;
     if (p.dead) {

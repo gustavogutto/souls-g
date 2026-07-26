@@ -4,12 +4,12 @@ import * as THREE from "three";
 import type { Mesh, Group } from "three";
 import { type BossState, type GameState, spawnFloatingText, spawnGroundHazard, spawnProjectile, killPlayer } from "./GameState";
 import { applyDamageReduction } from "./utils/equipment";
-import { isWallTile, resolveCollision } from "./maps/collision";
+import { resolveCollision } from "./maps/collision";
 import { bossMovesForType, bossVisualForType, BOSS_COMBAT, TIDEWARDEN_GRAB_TRIGGER_RANGE, TIDEWARDEN_HEAL_PUNISH_WINDOW_MS, type BossMove } from "./utils/bossData";
 import { PROJECTILE_EFFECT_BY_TYPE } from "./utils/statusEffects";
-import { BLOCK_DAMAGE_REDUCTION } from "./gameConstants";
+import { BLOCK_DAMAGE_REDUCTION, clampDt } from "./gameConstants";
 
-const BOSS_RADIUS = 0.9;
+export const BOSS_RADIUS = 0.9;
 
 // The Hollow Wyrm only (feature 5) — every other boss's phase stays "ground"
 // forever and never touches this block. Kept modest in scope (see bossData.ts's
@@ -110,11 +110,15 @@ function resolveBossStrike(boss: BossState, state: GameState, move: BossMove, di
   }
 
   if (move.lunge) {
+    // Was a raw point check against the lerp target's single tile — ignored
+    // BOSS_RADIUS entirely, so the boss's actual capsule (radius 0.9, nearly
+    // a full tile wide) could visually sink into a wall face before its
+    // center finally crossed the tile boundary. resolveCollision is the same
+    // radius-aware push-out every other boss/enemy/player movement already uses.
     const t = Math.min(1, boss.stateElapsedMs / move.strikeMs);
-    const nx = THREE.MathUtils.lerp(boss.lungeFromX, boss.windupTargetX, t);
-    const nz = THREE.MathUtils.lerp(boss.lungeFromZ, boss.windupTargetZ, t);
-    if (!isWallTile(state.mapData, Math.floor(nx), Math.floor(boss.position.z))) boss.position.x = nx;
-    if (!isWallTile(state.mapData, Math.floor(boss.position.x), Math.floor(nz))) boss.position.z = nz;
+    boss.position.x = THREE.MathUtils.lerp(boss.lungeFromX, boss.windupTargetX, t);
+    boss.position.z = THREE.MathUtils.lerp(boss.lungeFromZ, boss.windupTargetZ, t);
+    resolveCollision(state.mapData, boss.position, BOSS_RADIUS);
   }
 
   if (!boss.hasDealtDamageThisStrike && boss.stateElapsedMs >= move.strikeMs * 0.5) {
@@ -161,7 +165,8 @@ export function Boss({ state, bossState }: { state: GameState; bossState: BossSt
   const bodyRef = useRef<Mesh>(null!);
   const telegraphRef = useRef<Mesh>(null!);
 
-  useFrame((_, dt) => {
+  useFrame((_, rawDt) => {
+    const dt = clampDt(rawDt);
     const boss = bossState;
     if (boss.aiState === "dead") {
       groupRef.current.visible = false;

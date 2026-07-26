@@ -28,9 +28,9 @@ import { PROJECTILE_EFFECT_BY_TYPE } from "./utils/statusEffects";
 import { hasLineOfSight } from "./utils/lineOfSight";
 import { isWallTile, resolveCollision } from "./maps/collision";
 import { findPath } from "./maps/pathfinding";
-import { BLOCK_DAMAGE_REDUCTION } from "./gameConstants";
+import { BLOCK_DAMAGE_REDUCTION, clampDt } from "./gameConstants";
 
-const ENEMY_RADIUS = 0.4;
+export const ENEMY_RADIUS = 0.4;
 const REPATH_INTERVAL_MS = 500;
 
 function colorForRole(role: string): string {
@@ -297,7 +297,8 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
   const bodyRef = useRef<Mesh>(null!);
   const telegraphRef = useRef<Mesh>(null!);
 
-  useFrame((_, dt) => {
+  useFrame((_, rawDt) => {
+    const dt = clampDt(rawDt);
     const e = enemyState;
     const p = state.player;
     if (e.aiState === "dead") {
@@ -368,11 +369,15 @@ export function Enemy({ state, enemyState }: { state: GameState; enemyState: Ene
             }
             break;
           case "lunge": {
+            // Same radius-blind point check the boss's own lunge had — see
+            // Boss.tsx's resolveBossStrike comment. resolveCollision keeps
+            // the enemy's actual capsule (ENEMY_RADIUS) from sinking into
+            // the wall face instead of only stopping once its center tile
+            // flips to "wall".
             const t = Math.min(1, e.stateElapsedMs / cfg.strikeMs);
-            const nx = THREE.MathUtils.lerp(e.lungeFromX, e.windupTargetX, t);
-            const nz = THREE.MathUtils.lerp(e.lungeFromZ, e.windupTargetZ, t);
-            if (!isWall(state.mapData, nx, e.position.z)) e.position.x = nx;
-            if (!isWall(state.mapData, e.position.x, nz)) e.position.z = nz;
+            e.position.x = THREE.MathUtils.lerp(e.lungeFromX, e.windupTargetX, t);
+            e.position.z = THREE.MathUtils.lerp(e.lungeFromZ, e.windupTargetZ, t);
+            resolveCollision(state.mapData, e.position, ENEMY_RADIUS);
             if (!e.hasDealtDamageThisStrike && e.stateElapsedMs >= cfg.strikeMs * 0.5 && dist <= cfg.attackRange) {
               e.hasDealtDamageThisStrike = true;
               applyMeleeHitToPlayer(e, state, 1);

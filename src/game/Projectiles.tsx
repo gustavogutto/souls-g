@@ -5,7 +5,7 @@ import type { Mesh } from "three";
 import { type GameState, spawnFloatingText, killPlayer, handleSpecialEnemyDeath, handleBossDefeatReward, applyChill, applyStatusEffect } from "./GameState";
 import { applyDamageReduction, applySoulsGainModifier } from "./utils/equipment";
 import { isWallTile } from "./maps/collision";
-import { PROJECTILE_POOL_SIZE, SOULS_PER_KILL, SOULS_PER_BOSS, BLOCK_DAMAGE_REDUCTION } from "./gameConstants";
+import { PROJECTILE_POOL_SIZE, SOULS_PER_KILL, SOULS_PER_BOSS, BLOCK_DAMAGE_REDUCTION, clampDt } from "./gameConstants";
 
 const HIT_RADIUS = 0.45;
 const HOMING_RANGE = 6; // units — Ashmote's "6-unit cone" per design doc section 5
@@ -41,7 +41,8 @@ function applyHoming(proj: { position: THREE.Vector3; dir: THREE.Vector3; homing
 export function Projectiles({ state }: { state: GameState }) {
   const meshRefs = useRef<(Mesh | null)[]>([]);
 
-  useFrame((_, dt) => {
+  useFrame((_, rawDt) => {
+    const dt = clampDt(rawDt);
     if (state.paused) return;
     const list = state.projectiles;
     const p = state.player;

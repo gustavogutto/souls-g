@@ -10,6 +10,7 @@ import { DungeonRenderer } from "./DungeonRenderer";
 import { Player } from "./Player";
 import { Enemy } from "./Enemy";
 import { Boss } from "./Boss";
+import { EntitySeparation } from "./EntitySeparation";
 import { Hazards } from "./Hazards";
 import { Interactables } from "./Interactables";
 import { HearthGates, HEARTH_GATE_LABELS } from "./HearthGates";
@@ -228,6 +229,7 @@ function Floor1Gameplay({
           <Enemy key={e.id} state={state} enemyState={e} />
         ))}
         {state.boss && <Boss state={state} bossState={state.boss} />}
+        <EntitySeparation state={state} />
         <BossGateDoor state={state} />
         <Hazards state={state} />
         <Interactables state={state} input={input} onIllusoryWallRevealed={() => setWallRevealVersion((v) => v + 1)} />
